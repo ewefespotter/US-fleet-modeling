@@ -6,8 +6,13 @@ library(tidyr)
 library(stringr)
 library(tidyverse)
 
+data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
+mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "")
 
-EVLIB_Flows_demand <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII (1) .csv")
+mineral_intensity <- mineral_intensity %>%
+  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))
+
+EVLIB_Flows_demand <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_Repeal_new.csv")
 
 ### Label retirement vectors with the appropriate sale year
 # Starting year
@@ -51,7 +56,7 @@ future_demand_type <- EVLIB_Flows_demand %>%
 
 
 ### RUN CAPACITY SCENARIOS
-capacity_chem_scenarios <- function(batt_cap_df,chem_df) {
+capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, future_demand_type) {
   
   ### RECYCLE in Future- cut only those sales years with the projection
   future_demand_cap <- merge(
@@ -72,8 +77,8 @@ capacity_chem_scenarios <- function(batt_cap_df,chem_df) {
   future_demand_chem <- left_join(future_demand_cap, chem_df, by = c("Sale_Year"), relationship = 'many-to-many') 
   future_demand_chem$Cathode_kwh_state<- future_demand_chem$LIB_demand_kwh * future_demand_chem$`Cathode Mix Share`
   
-  
-  future_demand_minerals <- left_join(future_demand_chem, mineral_intensity, by = "Cathode Mix", relationship = 'many-to-many') %>%
+    
+  future_demand_minerals <- left_join(future_demand_chem, mineral_intensity, by = c("Cathode Mix" = "chemistry"), relationship = 'many-to-many') %>%
     mutate(`Demanded Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
     select(`Year`, `Sale_Year`, State, Mineral, `Demanded Minerals (kg)`)
   
@@ -99,48 +104,29 @@ scenario_combos <- crossing(
   Chem = names(chem_scens)
 )
 
-# Safe version of your scenario function with fallback
+
 safe_capacity_chem_scenarios <- function(batt_name, chem_name) {
-  res <- tryCatch({
+  tryCatch({
     df <- capacity_chem_scenarios(
       batt_cap_df = batt_scen[[batt_name]],
-      chem_df = chem_scens[[chem_name]]
+      chem_df = chem_scens[[chem_name]],
+      mineral_intensity = mineral_intensity,
+      future_demand_type = future_demand_type
     )
     
-    # If NULL or 0 rows, return empty tibble with correct columns
-    if (is.null(df) || nrow(df) == 0) {
-      tibble(
-        Year = integer(),
-        Sale_Year = integer(),
-        State = character(),
-        Mineral = character(),
-        `Demanded Minerals (kg)` = numeric(),
-        Battery_Scenario = character(),
-        Chemistry_Scenario = character()
+    # Add scenario labels
+    df %>%
+      mutate(
+        Battery_Scenario = batt_name,
+        Chemistry_Scenario = chem_name
       )
-    } else {
-      df %>%
-        mutate(
-          Battery_Scenario = batt_name,
-          Chemistry_Scenario = chem_name
-        )
-    }
+    
   }, error = function(e) {
-    warning(paste("Error in scenario:", batt_name, "/", chem_name, "->", e$message))
-    tibble(
-      Year = integer(),
-      Sale_Year = integer(),
-      State = character(),
-      Mineral = character(),
-      `Demanded Minerals (kg)` = numeric(),
-      Battery_Scenario = character(),
-      Chemistry_Scenario = character()
-    )
+    message("⚠ Error in scenario: ", batt_name, " / ", chem_name)
+    message("  -> ", e$message)
+    NULL  # return NULL so you can filter out later
   })
-  
-  return(res)
 }
-
 
 # Run all scenarios using pmap safely
 all_demand_scenarios <- scenario_combos %>%
@@ -152,6 +138,7 @@ all_demand_scenarios <- scenario_combos %>%
   )
 
 
+
 cap_chem_demand_results <- bind_rows(all_demand_scenarios$result)
 
 cap_chem_demand_results <- cap_chem_demand_results %>%
@@ -160,26 +147,29 @@ cap_chem_demand_results <- cap_chem_demand_results %>%
 
 
 ratio_results <- merge(cap_chem_demand_results, summary_final_future_hist, by = c("Year", "State", "Mineral", "Scenario"))
+ratio_scrap <- merge(cap_chem_demand_results, recycle_and_scrap, by = c("Year", "State", "Mineral", "Scenario"))
 
-ratio_results <- ratio_results %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`)
+ratio_results <- ratio_results %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
+ratio_scrap <- ratio_scrap %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
 
 # Combine historical and future projections
 install.packages("ggforce")
 library(ggplot2)
 library(ggforce)
 library(dplyr)
-
+## change file to ACCII or Repeal- change title
+## change state_data to scrap or results and chnage title and y axis for scrap or regular results
 # Get all unique states
 states <- unique(ratio_results$State)
 
-output_file <- "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ratio_minerals_by_state.pdf"
+output_file <- "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ratio_minerals_by_state_w_recovery_scrap_Repeal.pdf"
 
 
 pdf(output_file, width = 12, height = 8)
 
 # Loop over states and make one page per state
 for (s in states) {
-  state_data <- ratio_results %>%
+  state_data <- ratio_scrap %>%
     filter(State == s)
 
   
@@ -188,19 +178,24 @@ for (s in states) {
     geom_line() +
     facet_wrap(~ Mineral, scales = "free_y", ncol = 2) +  # adjust ncol/nrow as needed
     labs(
-      title = paste("Minerals in Recycled Batteries vs Minerals Demanded –", s),
+      title = paste("Repeal - Minerals in Recycled Batteries + Scrap vs Minerals Demanded –", s),
       x = "Year",
-      y = "Ratio (Recycled Material/Demanded Material)",
+      y = "Ratio (Recycled Material + Scrap/Demanded Material)",
       color = "Scenario",
       linetype = "Scenario"
     ) +
-    theme_minimal() +
+    theme_minimal(base_size = 15) +
     theme(
       legend.position = "bottom",
-      legend.text = element_text(size = 7),
-      legend.key.width = unit(1.5, "cm"),
+      legend.text = element_text(size = 11),       # readable font
+      legend.title = element_text(size = 12),      # optional, slightly bigger title
+      legend.key.size = unit(0.3, "cm"),           # smaller legend boxes
       plot.margin = margin(t = 10, r = 80, b = 50, l = 10),
       legend.box.margin = margin(t = 10)
+    ) +
+    guides(
+      color = guide_legend(nrow = 2, byrow = TRUE),  # multiple rows if needed
+      fill  = guide_legend(nrow = 2, byrow = TRUE)
     ) +
     coord_cartesian(clip = "off")
   
