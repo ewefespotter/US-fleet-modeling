@@ -19,7 +19,7 @@ library(colorspace)
                           ## Manufacturing_Recycling_Demand
                           ## Future Recycling Minerals
                           ## Future Demand Minerals
-                    ##Run all again w Repeal
+                    ##Run all everything starting at Historical Sales Minerals again w Repeal
 
 
 ### SCENARIOS-- 
@@ -79,7 +79,9 @@ MX_dereg <- read_csv(file.path(data_folder, "Mexico_Dereg_EV_vectors_USsurvival.
   select(Year, total_df) %>%
   unnest(total_df)
 
-
+specific_energy <- read_csv(file.path(data_folder, "Specific_Energy (-Energy BatPac).csv")) %>% rename (`Cathode Mix` = `Battery Chem`) 
+batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% select(where(~ !all(is.na(.)))) 
+colnames(batpac_scrap_min) <- c("Product_Abbrev", "Mineral", "Value")
 
 ## THIS IS ASSUMING US/CA distribution of segment and propulsion retiring each year --> using MX age distribution
 ## could use also US/CA age dist of seg/prop 
@@ -154,8 +156,6 @@ MX_Flows <- MX_dereg %>%
   
 future_recycle_type <- bind_rows(future_recycle_type, MX_Flows)
 
-###LCO https://www.fluxpower.com/blog/what-is-the-energy-density-of-a-lithium-ion-battery?utm_source=chatgpt.com
-specific_energy <- read_csv(file.path(data_folder, "Specific_Energy (-Energy BatPac).csv")) %>% rename (`Cathode Mix` = `Battery Chem`) 
 specific_energy <- specific_energy %>%
   bind_rows(
     tibble(
@@ -184,9 +184,6 @@ specific_energy <- specific_energy %>%
 
 
 ## Minerals
-batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% select(where(~ !all(is.na(.)))) 
-colnames(batpac_scrap_min) <- c("Product_Abbrev", "Mineral", "Value")
-
 ### all by yr
 batpac_scrap_min <- batpac_scrap_min %>% 
   mutate(`kg/Gwh` = Value/50) #(kg/yr) *1/(50000000 kwh/yr) * 1000000 kwh/Gwh
