@@ -6,8 +6,9 @@ library(stringr)
 library(purrr)
 ### Uses EV Volumes battery capacity and chemistry on
 
-EVLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII (1) .csv")
-
+EVLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv")
+EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") 
+EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_hist, EVLIB_Flows_CA_hist)
 # Starting year
 start_year <- 2020
 
@@ -124,14 +125,6 @@ hist_recycle_cap <- hist_recycle_cap %>%
 
 
 ###CHEMISTRY
-hist_recycle_chem <- merge(
-              chem_Mwh, 
-              hist_recycle_cap, 
-              by = c("Sale_Year", "Propulsion", "Segment"),
-              all.x = TRUE)
-
-
-hist_recycle_chem$Cathode_kwh_state<- hist_recycle_chem$LIB_recycle_kwh * hist_recycle_chem$`Share of Avg Chem`
 
 # Replace cathode mix values
 replacement <- c(
@@ -154,8 +147,8 @@ chem_Mwh$`Cathode Mix` <- recode(chem_Mwh$`Cathode Mix`, !!!replacement)
 ##18% and 29% BEV and PHEV are NMC (unspecified)
 chem_Mwh <- chem_Mwh %>% filter(Propulsion != "FCEV")
 
-cathode_mix_filter <- chem_Mwh$`Cathode Mix` %in% 
-  c("tba (unspecified)", "NiMH (unspecified)", "LMP (unspecified)")
+# cathode_mix_filter <- chem_Mwh$`Cathode Mix` %in% 
+#   c("tba (unspecified)", "NiMH (unspecified)", "LMP (unspecified)")
 
 # ## verify it is very small
 # total_sums <- chem_Mwh %>%
@@ -208,35 +201,72 @@ max_values <- NMC_match %>%
 #                              "Recycle BEV (kwh)" = "BEV",
 #                              "Recycle PHEV (kwh)" = "PHEV"))
 
-prep_for_min <- left_join(hist_recycle_chem, max_values, 
-                          by = c("Sale_Year", "Segment", "Propulsion"))
+chem_Mwh <- left_join(chem_Mwh, max_values, 
+                      by = c("Sale_Year", "Segment","Propulsion"))
 
-mask_mins <- prep_for_min$`Cathode Mix.x` %in% 
+mask_mins <- chem_Mwh$`Cathode Mix.x` %in% 
   c("tba (unspecified)", "NiMH (unspecified)", "LMP (unspecified)", "NMC (unspecified)")
 
-prep_for_min$`Cathode Mix.x`[mask_mins] <- prep_for_min$`Cathode Mix.y`[mask_mins]
+chem_Mwh$`Cathode Mix.x`[mask_mins] <- chem_Mwh$`Cathode Mix.y`[mask_mins]
 
-prep_for_min <- prep_for_min %>%
+chem_Mwh <- chem_Mwh %>%
   select(-`Cathode Mix.y`) %>%
   rename(`Cathode Mix` = `Cathode Mix.x`)
 
 
-#mineral_intensity <- mineral_intensity %>%
-  #rename(`Cathode Mix` = chemistry)
+
+hist_recycle_chem <- merge(
+  chem_Mwh, 
+  hist_recycle_cap, 
+  by = c("Sale_Year", "Propulsion", "Segment"),
+  all.x = TRUE)
+
+
+hist_recycle_chem$Cathode_kwh_state<- hist_recycle_chem$LIB_recycle_kwh * hist_recycle_chem$`Share of Avg Chem`
+
+hist_recycle_chem <- hist_recycle_chem %>%
+  mutate(Sale_Year = as.integer(Sale_Year)) %>%
+  select(Year, Sale_Year, State, `Cathode Mix`, Cathode_kwh_state, LIB_recycle_kwh) %>% 
+  rename(State_Province = State) 
+
+mineral_intensity <- mineral_intensity %>%
+  rename(`Cathode Mix` = chemistry)
 
 hist_final <- left_join(prep_for_min, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
   mutate(`Available Recycled Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
-  select(`Sale_Year`, State, Mineral, `Year`, `Available Recycled Minerals (kg)`)
+  select(`Sale_Year`, State, Mineral, `Year`, `Available Recycled Minerals (kg)`) %>% rename(State_Province = State)
 
 hist_final <- hist_final %>%
-  group_by(Year, State, Mineral) %>%
+  group_by(Year, State_Province, Mineral) %>%
   summarise(`Available Recycled Minerals (kg)` = sum(`Available Recycled Minerals (kg)`, na.rm = TRUE), .groups = "drop") %>%
   filter(!is.na(`Mineral`))
 
-scenarios <- cap_chem_results %>%
-  distinct(Battery_Scenario, Chemistry_Scenario) %>%
-  mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - "))
-
-hist_final_expanded <- hist_final %>%
-  crossing(scenarios %>% select(Scenario)) %>%
-  filter(Year >= 2025)
+# 
+# ### EDIT HIST ONE TO TAKE SCENARIOS
+# scenarios <- cap_chem_results %>%
+#   distinct(Battery_Scenario, Chemistry_Scenario) %>%
+#   mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - "))
+# 
+# hist_final_expanded <- hist_final %>%
+#   crossing(scenarios %>% select(Scenario)) %>%
+#   filter(Year >= 2025)
+# 
+# recycle_cols <- c(
+#   "Available Recycled Minerals Current Cap (kg)",
+#   "Available Recycled Minerals (w Scrap) (kg)",
+#   "Available Recycled Minerals Increased R and Scrap (kg)",
+#   "Available Recycled Minerals Increased R Same Scrap (kg)",
+#   "Available Recycled Minerals Increased R No Scrap (kg)",
+#   "Available Recycled Minerals No R Restraint (kg)"
+# )
+# 
+# # Duplicate hist_final across all scenario columns
+# hist_final_expanded <- hist_final_expanded %>%
+#   mutate(
+#     `Available Recycled Minerals Current Cap (kg)` = `Available Recycled Minerals (kg)`,
+#     `Available Recycled Minerals (w Scrap) (kg)` = `Available Recycled Minerals (kg)`,
+#     `Available Recycled Minerals Increased R and Scrap (kg)` = `Available Recycled Minerals (kg)`,
+#     `Available Recycled Minerals Increased R Same Scrap (kg)` = `Available Recycled Minerals (kg)`,
+#     `Available Recycled Minerals Increased R No Scrap (kg)` = `Available Recycled Minerals (kg)`,
+#     `Available Recycled Minerals No R Restraint (kg)` = `Available Recycled Minerals (kg)`
+#   )

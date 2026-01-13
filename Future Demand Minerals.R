@@ -5,41 +5,20 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 library(tidyverse)
+library(ggplot2)
+library(ggforce)
 
-data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
-mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "")
 
-mineral_intensity <- mineral_intensity %>%
-  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))
-
-EVLIB_Flows_demand <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_Repeal_new.csv")
-
-### Label retirement vectors with the appropriate sale year
-# Starting year
-start_year <- 2020
-
-name_vector_with_years <- function(vec_string, start_year) {
-  # Make sure it's a string
-  vec_string <- as.character(vec_string)
-  
-  # Split and convert to numeric
-  vec <- as.numeric(strsplit(vec_string, "\\|")[[1]])
-  
-  # Assign year names (increasing years)
-  names(vec) <- start_year - (seq_along(vec) - 1)
-  
-  return(vec)
-}
+EVLIB_Flows_Demand <- EVLIB_Flows
 
 # Apply to each row using Map
-EVLIB_Flows_demand$EV_stock_vector <- Map(
+EVLIB_Flows_Demand$EV_stock_vector <- Map(
   name_vector_with_years,
-  EVLIB_Flows_demand$EV_stock_vector,
-  EVLIB_Flows_demand$Year
+  EVLIB_Flows_Demand$EV_stock_vector,
+  EVLIB_Flows_Demand$Year
 )
 
-
-future_demand_type <- EVLIB_Flows_demand %>%
+future_demand_type <- EVLIB_Flows_Demand %>%
   mutate(
     demand_df = map(EV_stock_vector, ~ {
       tibble(
@@ -49,53 +28,78 @@ future_demand_type <- EVLIB_Flows_demand %>%
     })
   ) %>%
   unnest(cols = demand_df)  %>%
-  filter(Year == Sale_Year) %>%  # Only keep rows for the matching year
-  select(State, Segment, Propulsion, Year, Sale_Year, EV_stock_total)
+  select(State, Segment, Propulsion, Year, Sale_Year, EV_stock_total) %>%
+  rename(State_Province = State)
 
+future_demand_type <- future_demand_type %>%  mutate(State_Province = case_when(
+  State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
+  TRUE ~ State_Province))  %>% filter(Sale_Year > 2025)
+
+# Convert all Sale_Year columns to integer
+future_demand_type$Sale_Year <- as.integer(future_demand_type$Sale_Year) 
 
 
 
 ### RUN CAPACITY SCENARIOS
 capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, future_demand_type) {
-  
+  batt_df_collapsed <- batt_cap_df %>%
+    group_by(State_Province, Segment, Propulsion, Sale_Year) %>%
+    summarise(
+      `Projected Avg Batt Cap (kwh/batt)` =
+        first(`Projected Avg Batt Cap (kwh/batt)`),
+      .groups = "drop"
+    )
   ### RECYCLE in Future- cut only those sales years with the projection
-  future_demand_cap <- merge(
-    batt_cap_df, 
-    future_demand_type, 
-    by = c("Sale_Year", "Segment", "Propulsion"), all.x = TRUE)
-  
+  future_demand_cap <- future_demand_type %>% left_join(
+    batt_df_collapsed, 
+    by = c("State_Province", "Sale_Year", "Segment", "Propulsion"))
+
   # Apply avg battery size per powertrain and type
   future_demand_cap$LIB_demand_kwh <- future_demand_cap$EV_stock_total * future_demand_cap$`Projected Avg Batt Cap (kwh/batt)`
-  
-  # Keep only relevant columns
+
+  future_demand_cap <- future_demand_cap %>% group_by(Year, Sale_Year, State_Province) %>%
+    summarise(LIB_demand_kwh = sum(LIB_demand_kwh, na.rm = TRUE),
+              .groups = "drop")
+
   future_demand_cap <- future_demand_cap %>%
-    select(`Year`, `Sale_Year`, State, `Segment`,`Propulsion`, 
-           `LIB_demand_kwh`)
-  
+    arrange(State_Province, Year)
   
   ### APPLY BENCHMARK
-  future_demand_chem <- left_join(future_demand_cap, chem_df, by = c("Sale_Year"), relationship = 'many-to-many') 
-  future_demand_chem$Cathode_kwh_state<- future_demand_chem$LIB_demand_kwh * future_demand_chem$`Cathode Mix Share`
+  future_demand_chem <- future_demand_cap %>% 
+    left_join(chem_df, by = c("Sale_Year"), relationship = 'many-to-many') %>%
+    mutate(Cathode_kwh_state = LIB_demand_kwh * `Cathode Mix Share`) %>%
+    select(-`Cathode Mix Share`)
   
-    
-  future_demand_minerals <- left_join(future_demand_chem, mineral_intensity, by = c("Cathode Mix" = "chemistry"), relationship = 'many-to-many') %>%
+  nat_demand <- future_demand_chem %>% group_by(Year) %>%
+    summarise(Cathode_kwh_state = sum(Cathode_kwh_state, na.rm = TRUE))
+
+  future_demand_minerals <- 
+    left_join(future_demand_chem, mineral_intensity, by = c("Cathode Mix"), relationship = 'many-to-many') %>%
+    filter(!Mineral %in% Not_recovered) %>% ## don't care if demanded either then
     mutate(`Demanded Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
-    select(`Year`, `Sale_Year`, State, Mineral, `Demanded Minerals (kg)`)
-  
+    select(Year, Sale_Year, State_Province, Mineral, `Demanded Minerals (kg)`) 
+
+  nat_min_demand <- future_demand_minerals %>%group_by(Year, Mineral) %>%
+    summarise(`Demanded Minerals (kg)` = sum(`Demanded Minerals (kg)`, na.rm = TRUE)) %>%
+    filter(Mineral == "Nickel")
+
   future_demand_final <- future_demand_minerals %>%
-    group_by(Year, State, Mineral) %>%
+    group_by(Year, State_Province, Mineral) %>%
     summarise(`Demanded Minerals (kg)` = sum(`Demanded Minerals (kg)`, na.rm = TRUE), .groups = "drop") %>%
-    filter(!is.na(`Mineral`))
+    filter(!is.na(`Mineral`)) %>%
+    mutate(`Demand Minerals (Tonne)` = `Demanded Minerals (kg)`/1000)
   
   
+  fut_nat_fin <- future_demand_final %>% group_by(Year, Mineral) %>%
+    summarise(`Demand Minerals (Tonne)` = sum(`Demand Minerals (Tonne)`, na.rm = TRUE)) 
+  
+
   return(future_demand_final)
 }
 
 
-
-
 # Set names for scenarios
-names(batt_scen) <- c("Baseline Battery", "15% Lower Battery")
+names(batt_scen) <- c("Baseline Capacity", "15% Lower Capacity")
 names(chem_scens) <- c("Original Chemistry", "High LFP Chemistry")
 
 # Use `crossing()` to create all 4 combinations
@@ -137,8 +141,6 @@ all_demand_scenarios <- scenario_combos %>%
     )
   )
 
-
-
 cap_chem_demand_results <- bind_rows(all_demand_scenarios$result)
 
 cap_chem_demand_results <- cap_chem_demand_results %>%
@@ -146,24 +148,103 @@ cap_chem_demand_results <- cap_chem_demand_results %>%
   select(-Battery_Scenario,-Chemistry_Scenario)
 
 
-ratio_results <- merge(cap_chem_demand_results, summary_final_future_hist, by = c("Year", "State", "Mineral", "Scenario"))
-ratio_scrap <- merge(cap_chem_demand_results, recycle_and_scrap, by = c("Year", "State", "Mineral", "Scenario"))
 
-ratio_results <- ratio_results %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
-ratio_scrap <- ratio_scrap %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
+nat_demand_cap_chem<- cap_chem_demand_results %>% group_by(Year, Scenario, Mineral) %>%
+  summarise(`Demand Minerals (Tonne)` = sum(`Demand Minerals (Tonne)`, na.rm = TRUE)) %>%
+  mutate(Year = as.numeric(Year))
+
+
+recycle_shifted <- all_nat_cap_chem_rec %>%
+  arrange(Mineral, Scenario, Year) %>%
+  group_by(Mineral, Scenario) %>%
+  mutate(Year = as.numeric(Year) + 1) %>%  # shift Tonne to the next year
+  ungroup()
+
+# Step 2: Merge with demand
+ratio_results <- recycle_shifted %>%
+  inner_join(nat_demand_cap_chem, by = c("Year", "Mineral", "Scenario")) %>%
+  mutate(Recycle_v_Demand = Tonne / `Demand Minerals (Tonne)`) %>%
+  select(-c(Tonne, `Demand Minerals (Tonne)`)) %>%
+  mutate(Scenario = factor(Scenario, levels = legend_order))
+
+#ratio_scrap <- merge(cap_chem_demand_results, recycle_and_scrap, by = c("Year", "State", "Mineral", "Scenario"))
+#ratio_scrap <- ratio_scrap %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
+
+
+## Recycling Plots
+ggplot(
+  ratio_results,
+  aes(
+    x = as.numeric(Year),
+    y = Recycle_v_Demand,
+    color = Scenario,                
+    alpha = `Recycling Scenario`,    
+    group = interaction(Scenario, `Recycling Scenario`)  
+  )
+) + 
+  scale_y_sqrt() +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  facet_wrap(~ Mineral, scales = "free_y") +
+  labs(
+    title = "Delayed Openings - Maximum Recycled Content North America by Mineral",
+    x = "Year",
+    y = "Tonne Recycled vs Tonne Demanded in Following Year",
+    color = "Battery Capacity - Chemistry Scenario",
+    alpha = "Recycling Scenario"
+  ) +
+  scale_alpha_manual(values = c(
+    "Recycling Limited to NA 2025 Online or Planned Facilities" = 1,  # darkest
+    "All Material is Recycled in NA" = 0.4
+    # add more if you have more recycling scenarios
+  )) +
+  scale_x_continuous(breaks = seq(2025, 2050, by = 5)) + 
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 30, hjust = 1),  # tilt x-axis labels
+    strip.text = element_text(size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 11)
+  ) +
+  guides(
+    color = guide_legend(
+      title.position = "top",
+      title.hjust = 0.5,
+      nrow = 2,
+      byrow = TRUE
+    ),
+    alpha = guide_legend(
+      title.position = "top",
+      title.hjust = 0.5,
+      nrow = 2,
+      byrow = TRUE,
+      override.aes = list(
+        color = "black",
+        linewidth = 1.2
+      )
+    )
+  )
+
+
+
+
+
+
+
 
 # Combine historical and future projections
 install.packages("ggforce")
-library(ggplot2)
-library(ggforce)
-library(dplyr)
 ## change file to ACCII or Repeal- change title
 ## change state_data to scrap or results and chnage title and y axis for scrap or regular results
 # Get all unique states
 states <- unique(ratio_results$State)
 
-output_file <- "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ratio_minerals_by_state_w_recovery_scrap_Repeal.pdf"
 
+output_file <- "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ratio_minerals_by_state_w_recovery_scrap_Repeal.pdf"
 
 pdf(output_file, width = 12, height = 8)
 
