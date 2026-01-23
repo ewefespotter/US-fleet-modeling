@@ -9,9 +9,9 @@ library(stringr)
 library(tidyverse)
 library(writexl)
 library(colorspace)
-
 ### Run Order:      ##EV_Volumes_Clean
                     ##Historical Sales Minerals
+                    ##Scenarios SetUp
                     ##Manufacturing_Recycling_Demand
                     ##Future Recycling Minerals
                     ##Future Demand Minerals
@@ -19,175 +19,21 @@ library(colorspace)
                           ## Manufacturing_Recycling_Demand
                           ## Future Recycling Minerals
                           ## Future Demand Minerals
-                    ##Run all everything starting at Historical Sales Minerals again w Repeal
-
-
-### SCENARIOS-- 
-##50% new demand is LFP --- ##30% of tesla is LFP -- canceled
-## 15% reduction batt cap and continuation batt cap
+                    ##Run all everything starting at Manufacturing_Recycling_Demand again w Repeal
 
 
 ## DATA INPUTS
 ### Start up phase of 4 years starts at about 20 on average and decreases to 4-12%
-cathode_projections <- read_excel("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Cathode Projections (1).xlsx", sheet = "Sheet1")
-EVLIB_Flows <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv")
-EV_Flows <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
-  select(State, Segment, Year, add_BEV, add_PHEV) %>%
-  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
-  rename(BEV = add_BEV, PHEV = add_PHEV) %>%
-  pivot_longer(cols = c(BEV, PHEV),
-               names_to = "Propulsion",
-               values_to = "Add_EV")
-
-
-EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") 
-EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
-  select(State, Segment, Year, add_BEV, add_PHEV) %>%
-  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
-  rename(BEV = add_BEV, PHEV = add_PHEV) %>%
-  pivot_longer(cols = c(BEV, PHEV),
-               names_to = "Propulsion",
-               values_to = "Add_EV")
-
-EV_Flows <- bind_rows(EV_Flows, EV_Flows_CA)
-EVLIB_Flows <- bind_rows(EVLIB_Flows, EVLIB_Flows_CA)
-data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
-mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
-  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))%>%
-  rename("Cathode Mix" = chemistry)
-
-
-MX_dereg <- read_csv(file.path(data_folder, "Mexico_Dereg_EV_vectors_USsurvival.csv"), na = "") %>%
-  select(Year, Total_vec) %>%
-  rowwise() %>%
-  mutate(
-    Total_vec = list({
-      v <- as.numeric(strsplit(Total_vec, "\\|")[[1]])
-      names(v) <- Year - (seq_along(v) - 1)
-      v
-    })
-  ) %>%
-  ungroup()  %>%
-  mutate(
-    total_df = map(Total_vec, ~ {
-      tibble(
-        Sale_Year = as.integer(names(.x)),
-        Total_sales = as.numeric(.x)
-      )
-    })
-  ) %>%
-  select(Year, total_df) %>%
-  unnest(total_df)
-
-specific_energy <- read_csv(file.path(data_folder, "Specific_Energy (-Energy BatPac).csv")) %>% rename (`Cathode Mix` = `Battery Chem`) 
-batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% select(where(~ !all(is.na(.)))) 
+batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% 
+  select(where(~ !all(is.na(.)))) 
 colnames(batpac_scrap_min) <- c("Product_Abbrev", "Mineral", "Value")
+batpac_scrap_min <- batpac_scrap_min %>%
+  mutate(`kg/Gwh` = Value/50) 
+#(kg/yr) *1/(50000000 kwh/yr) * 1000000 kwh/Gwh
 
-## THIS IS ASSUMING US/CA distribution of segment and propulsion retiring each year --> using MX age distribution
-## could use also US/CA age dist of seg/prop 
-## so of the 2020 retirements of 2014 cars x% BEV y% PHEV instead of just of 2020 retirements x% BEV y% PHEV
-## if 95% BEV in 2020 but mostly recent bevs and older year phevs rather than 95% of each sale_year
-
-start_year <- 2020
-
-name_vector_with_years <- function(vec_string, start_year) {
-  # Make sure it's a string
-  vec_string <- as.character(vec_string)
-  
-  # Split and convert to numeric
-  vec <- as.numeric(strsplit(vec_string, "\\|")[[1]])
-  
-  # Assign year names (increasing years)
-  names(vec) <- start_year - (seq_along(vec) - 1)
-  
-  return(vec)
-}
-
-# Apply to each row using Map
-EVLIB_Flows$LIB_recycling_vector <- Map(
-  name_vector_with_years,
-  EVLIB_Flows$LIB_recycling_vector,
-  EVLIB_Flows$Year
-)
-
-future_recycle_type <- EVLIB_Flows %>%
-  mutate(
-    recycle_df = map(LIB_recycling_vector, ~ {
-      tibble(
-        Sale_Year = as.integer(names(.x)),
-        LIB_recycle_total = as.numeric(.x)
-      )
-    })
-  ) %>%
-  select(State, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
-  unnest(cols = recycle_df) %>% rename(State_Province = State)
-
-
-
-future_proportion_segment_prop <- future_recycle_type %>% 
-  group_by(Year, Sale_Year, Segment, Propulsion) %>%
-  summarise(
-    LIB_recycle_total = sum(LIB_recycle_total, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% group_by(Year, Sale_Year) %>%
-  mutate(percent  = LIB_recycle_total/sum(LIB_recycle_total)) %>%
-  select(Year, Sale_Year, Segment, Propulsion, percent)
-
-
-
-hist_proportion_segment_prop <- hist_recycle_type %>% 
-  group_by(Year, Sale_Year, Segment, Propulsion) %>%
-  summarise(
-    LIB_recycle_total = sum(LIB_recycle_total, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% group_by(Year, Sale_Year) %>%
-  mutate(percent  = LIB_recycle_total/sum(LIB_recycle_total)) %>%
-  select(Year, Sale_Year, Segment, Propulsion, percent)
-
-future_hist_proportions <- bind_rows(hist_proportion_segment_prop, future_proportion_segment_prop) %>%
-  mutate(percent = replace(percent, is.nan(percent), 0))
-
-MX_Flows <- MX_dereg %>% 
-  left_join(future_hist_proportions, by =c("Sale_Year","Year")) %>% 
-  mutate(LIB_recycle_total = Total_sales * percent,
-         State_Province = "MX") %>% 
-  filter(!is.na(LIB_recycle_total)) %>%
-  select(Year, State_Province, Sale_Year, Segment,Propulsion, LIB_recycle_total)
-  
-future_recycle_type <- bind_rows(future_recycle_type, MX_Flows)
-
-specific_energy <- specific_energy %>%
-  bind_rows(
-    tibble(
-      `Cathode Mix` = "NMCA",
-      Pack_kg_kwh = (specific_energy$Pack_kg_kwh[specific_energy$`Cathode Mix` == "NCA"] +
-                       specific_energy$Pack_kg_kwh[specific_energy$`Cathode Mix` == "NMC 811"])/2,
-      Cell_kg_kwh = (specific_energy$Cell_kg_kwh[specific_energy$`Cathode Mix` == "NCA"] +
-                       specific_energy$Cell_kg_kwh[specific_energy$`Cathode Mix` == "NMC 811"])/2
-    ), 
-    tibble (
-      `Cathode Mix` = "High/Mid NMC",
-      Pack_kg_kwh = (specific_energy$Pack_kg_kwh[specific_energy$`Cathode Mix` == "NMC 622"] +
-                       specific_energy$Pack_kg_kwh[specific_energy$`Cathode Mix` == "NMC 811"])/2,
-      Cell_kg_kwh = (specific_energy$Cell_kg_kwh[specific_energy$`Cathode Mix` == "NMC 622"] +
-                       specific_energy$Cell_kg_kwh[specific_energy$`Cathode Mix` == "NMC 811"])/2
-    ),
-    tibble(
-      `Cathode Mix` = "LCO",
-      Pack_kg_kwh = 5.85,
-      Cell_kg_kwh = 3.85
-    )
-  )
-
-specific_energy <- specific_energy %>%
-  mutate(`Cathode Mix` = if_else(`Cathode Mix` == "NMC 333", "NMC 111", `Cathode Mix`))
 
 
 ## Minerals
-### all by yr
-batpac_scrap_min <- batpac_scrap_min %>% 
-  mutate(`kg/Gwh` = Value/50) #(kg/yr) *1/(50000000 kwh/yr) * 1000000 kwh/Gwh
-
 mineral_map <- c(
   "Li, kg/yr" = "Lithium",
   "Ni, kg/yr" = "Nickel",
@@ -498,66 +344,8 @@ delay_prod_15_Gwh_state <- p_clean_manu_delayed_chem_state %>%
 
 
 
-### SET UP BATTERY CAP/CHEM SIMULATIONS
-fixed_batt_cap_merged <- batt_cap_merged %>% select(-c(`Total Sales`, `Total Mwh`)) %>% filter(Propulsion != "FCEV")
-batt_cap_merged$Sale_Year <- as.numeric(batt_cap_merged$Sale_Year)
-
-# Filter for Sale Year 2024
-batt_cap_2024 <- batt_cap_merged %>%
-  filter(Sale_Year == 2024) %>%
-  select(`Sale_Year`, Segment, Propulsion, Base_Capacity = `Avg Batt Cap (kwh/batt)`) 
-
-years_batt_cap <- 2025:2050
-
-trend_results <- batt_cap_merged %>%
-  filter(!is.na(`Avg Batt Cap (kwh/batt)`)) %>%
-  group_by(Segment, Propulsion) %>%
-  filter(n() >= 3) %>%  # Ensure enough data points
-  summarise(
-    trend = coef(lm(`Avg Batt Cap (kwh/batt)` ~ Sale_Year))[2],
-    .groups = "drop"
-  ) %>%
-  filter(Propulsion != "FCEV")
-
-projection_base <- batt_cap_2024 %>%
-  inner_join(trend_results, by = c("Segment", "Propulsion")) %>%
-  crossing(years_batt_cap)
-
-### RESTART HERE W DELAY
-batt_cap_projection <- projection_base %>%
-  mutate(`Projected Avg Batt Cap (kwh/batt)` = Base_Capacity + (years_batt_cap - 2024) * trend)
-
-
-batt_cap_projection <- batt_cap_projection %>% select(-Sale_Year) %>% rename(Sale_Year = years_batt_cap)
-
-#### BATT CAP Proj 2
-batt_cap_2040 <- batt_cap_2024 %>%
-  mutate(Base_Capacity = Base_Capacity * 0.85, Sale_Year = 2040)
-batts <- bind_rows(batt_cap_2024,batt_cap_2040)
-
-# Manual calculation using reframe
-second_trend_results <- batts %>%
-  group_by(Segment, Propulsion) %>%
-  filter(n() == 2) %>%  # Keep only groups with both years
-  reframe(
-    cap_2024 = Base_Capacity[Sale_Year == 2024],
-    cap_2040 = Base_Capacity[Sale_Year == 2040],
-    slope    = (cap_2040 - cap_2024) / (2040 - 2024),
-    intercept = cap_2024 - slope * 2024
-  )
-
-batt_cap_15 <- second_trend_results %>%
-  crossing(Sale_Year = years_batt_cap) %>%
-  mutate(
-    `Projected Avg Batt Cap (kwh/batt)` = case_when(
-      Sale_Year <= 2040 ~ intercept + slope * Sale_Year,
-      TRUE ~ intercept + slope * 2040  # hold at 2040 value
-    ) 
-  ) %>%
-  filter(Propulsion != "FCEV")
-
-### INTRODUCE THE SCRAP and DELAY
-batt_cap_projection <- batt_cap_projection %>%
+### INTRODUCE THE SCRAP and DELAY into cap/chem scenarios
+batt_cap_project <- batt_cap_projection %>%
   left_join(scrap_proj_tonnes,by = "Sale_Year") %>%
   left_join(prod_proj_Gwh_state,by = c("Year")) %>%
   select(
@@ -570,6 +358,8 @@ batt_cap_projection <- batt_cap_projection %>%
     Scrap_tonnes,
     Prod_Gwh_state
   ) 
+
+names(batt_cap_15) <- trimws(names(batt_cap_15))
 
 batt_cap_15 <- batt_cap_15 %>% 
   left_join(scrap_15_tonnes, by = "Sale_Year") %>% 
@@ -585,11 +375,13 @@ batt_cap_15 <- batt_cap_15 %>%
     Prod_Gwh_state
   )
 
+
+
 all_states <- tibble(
   State_Province = unique(c(unname(state_map_rev), "MX"))
 )
 
-combo_cathodes <- batt_cap_projection %>%
+combo_cathodes <- batt_cap_project %>%
   distinct(
     Sale_Year,
     Segment,
@@ -602,7 +394,7 @@ expanded_grid <- combo_cathodes %>%
 
 batt_cap_proj_ext <- expanded_grid %>%
   left_join(
-    batt_cap_projection,
+    batt_cap_project,
     by = c("Sale_Year", "Segment", "Propulsion", "State_Province", "Cathode Mix")
   ) 
 
@@ -612,7 +404,7 @@ batt_cap_15_ext <- expanded_grid %>%
     by = c("Sale_Year", "Segment", "Propulsion", "State_Province", "Cathode Mix")
   )
 
-combo_defaults_proj <- batt_cap_projection %>%
+combo_defaults_proj <- batt_cap_project %>%
   group_by(
     Sale_Year,
     Segment,
@@ -695,144 +487,18 @@ batt_cap_15_ext <- batt_cap_15_ext %>%
 
 
 batt_scen <- list(batt_cap_proj_ext, batt_cap_15_ext) 
-
-
-
-### CLEAN BENCHMARK CHEMISTRY
-# Slice and clean rows/columns
-cp <- cathode_projections[12:21, ]  # Python iloc[11:21] is R 12:21
-
-cp <- cp %>%
-  select(-`...2`, -`...3`) %>%
-  rename(`Cathode Mix` = `...1`) %>%
-  slice(-1)  # Drop row 12 (Python index 11)
-
-cp_melted <- cp %>%
-  pivot_longer(-`Cathode Mix`, names_to = "Sale_Year", values_to = "Total Mwh") %>%
-  mutate(`Sale_Year` = as.integer(`Sale_Year`)) %>%
-  group_by(`Sale_Year`) %>%
-  mutate(`Cathode Mix Share` = `Total Mwh` / sum(`Total Mwh`, na.rm = TRUE)) %>%
-  ungroup()
-
-replacement_future <- c(
-  'NCM low nickel' = 'NMC 111',
-  'NCM mid nickel' = 'NMC 622',
-  'NCM high nickel' = 'NMC 811'
-)
-
-cp_melted$`Cathode Mix` <- recode(cp_melted$`Cathode Mix`, !!!replacement_future)
-cp_melted <- cp_melted %>% filter(`Cathode Mix Share` != 0)
-
-fixed_cp <- cp_melted
-
-max_future <- fixed_cp %>%
-  group_by(`Sale_Year`) %>%
-  slice_max(`Cathode Mix Share`, n = 1, with_ties = FALSE) %>%
-  ungroup()
-
-# Merge back to fill in 'other' chemistries
-future_match <- left_join(fixed_cp, max_future, by = "Sale_Year", suffix = c("_x", "_y"), relationship = "many-to-one")
-
-# Replace unknown chemistries with most common
-mask_mins_future <- future_match$`Cathode Mix_x` %in% c("4V Ni or Mn based", "5V Mn based", "LCO", "Other")
-future_match$`Cathode Mix_x`[mask_mins_future] <- future_match$`Cathode Mix_y`[mask_mins_future]
-
-# Clean columns
-future_match <- future_match %>% 
-  select(`Sale_Year`, `Cathode Mix` = `Cathode Mix_x`, 
-         `Cathode Mix Share` = `Cathode Mix Share_x`, 
-         `Total Mwh` = `Total Mwh_x`) %>%
-  group_by(Sale_Year, `Cathode Mix`) %>%
-  summarise(`Total Mwh` = sum(`Total Mwh`, na.rm = TRUE), 
-            `Cathode Mix Share` = sum(`Cathode Mix Share`, na.rm = TRUE))
-
-
-### HIGH LFP Scenario
-total_mwh_per_year <- cp_melted %>%
-  group_by(Sale_Year) %>%
-  summarise(Total_Mwh = sum(`Total Mwh`, na.rm = TRUE), .groups = "drop")
-
-lfp_targets <- tibble(
-  Sale_Year = unique(cp_melted$Sale_Year),
-  LFP_share_target = scales::rescale(Sale_Year, to = c(0.27, 0.5))  # From 27% in 2024 to 50% in 2040
-)
-
-lfp_mwh_per_year <- total_mwh_per_year %>%
-  left_join(lfp_targets, by = "Sale_Year") %>%
-  mutate(LFP_Mwh = Total_Mwh * LFP_share_target)
-
-chem_with_targets <- future_match %>%
-  left_join(lfp_mwh_per_year, by = "Sale_Year")
-
-# Split into LFP and non-LFP
-lfp_rows <- chem_with_targets %>%
-  filter(`Cathode Mix` == "LFP") %>%
-  mutate(Adjusted_Mwh = LFP_Mwh)
-
-lfp_rows <- lfp_rows %>% mutate(New_Cathode_Share = LFP_share_target)
-
-other_chems <- chem_with_targets %>%
-  filter(`Cathode Mix` != "LFP")
-
-adjusted_other_chems <- other_chems %>%
-  group_by(Sale_Year) %>%
-  mutate(
-    total_other_share = sum(`Cathode Mix Share`, na.rm = TRUE),
-    remaining_mwh = unique(Total_Mwh) - unique(LFP_Mwh),
-    Adjusted_Mwh = (`Cathode Mix Share` / total_other_share) * remaining_mwh,
-    New_Cathode_Share = Adjusted_Mwh/Total_Mwh
-  ) %>%
-  ungroup()
-
-
-final_adjusted_mix <- bind_rows(lfp_rows, adjusted_other_chems) %>% 
-  mutate(`Cathode Mix Share` = New_Cathode_Share) %>% select(Sale_Year, `Cathode Mix`, `Cathode Mix Share`) 
-
-df_2040_adjusted <- final_adjusted_mix %>% filter(Sale_Year == 2040)
-df_extend_adjusted <- df_2040_adjusted %>%
-  mutate(Sale_Year = list(2041:2050)) %>%    # add future years
-  unnest(Sale_Year) 
-
-final_adjusted_mix_extended <- bind_rows(
-  final_adjusted_mix %>% filter(Sale_Year <= 2040),
-  df_extend_adjusted
-) %>%
-  arrange(`Cathode Mix`, Sale_Year)
-
-
-future_match <- future_match %>% select (-`Total Mwh`)
-
-df_2040_proj <- future_match %>% filter(Sale_Year == 2040)
-df_extend_proj <- df_2040_proj %>%
-  mutate(Sale_Year = list(2041:2050)) %>%
-  unnest(Sale_Year)
-
-future_match <- bind_rows(
-  future_match %>% filter(Sale_Year <= 2040),
-  df_extend_proj
-) %>%
-  arrange(`Cathode Mix`, Sale_Year)
-
 chem_scens <- list(future_match, final_adjusted_mix_extended)
 
 
-### Assuming 100% collected but recycle what can?
-###Put In Recycling Efficiency by 2035 for Seciton 177
-sec177 <- c('California','Oregon','Washington','New York','Massachusetts',
-            'Vermont','Colorado','Maryland','Delaware','New Mexico',
-            'New Jersey','Rhode Island','District of Columbia')
-
 future_recycle_type_collection <- future_recycle_type %>%  mutate(State_Province = case_when(
   State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
-  TRUE ~ State_Province))  %>% filter(Sale_Year > 2025)
-
-# Convert all Sale_Year columns to integer
-future_recycle_type_collection$Sale_Year <- as.integer(future_recycle_type_collection$Sale_Year) 
-
+  TRUE ~ State_Province))  %>% filter(Sale_Year > 2025) %>%
+  mutate(Sale_Year = as.integer(Sale_Year))
 
 
 ### Assumes manufacturing scrap is recycled anywhere and batteries are recycled anywhere
 ### this doesn't track where the recycling or manufacturing is happening
+## Assume 100% collection
 
 ### RUN SCENARIOS
 capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, future_recycle_type_collection) {
@@ -862,6 +528,10 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   future_recycle_cap <- future_recycle_cap %>%
     arrange(State_Province, Year)
   
+  nat_recycle_cap <- future_recycle_cap %>% group_by(Year) %>%
+    summarise(LIB_recycle_Gwh = sum(LIB_recycle_kwh)/1e6)
+  View(nat_recycle_cap)
+  
   ### APPLY BENCHMARK
   future_recycle_chem_fut <- future_recycle_cap %>%
     left_join(chem_df, by = "Sale_Year", relationship = "many-to-many") %>%
@@ -884,7 +554,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   
   ## assuming no improvements in energy density 
   future_mass_recycle_chem <- future_recycle_chem%>% inner_join(specific_energy, by = "Cathode Mix") %>% 
-    mutate(Batt_Mass_MT = LIB_recycle_kwh * Pack_kg_kwh/1000) ##check all chems have smth
+    mutate(Batt_Mass_MT = LIB_recycle_kwh * Cell_kg_kwh/1000) ##check all chems have smth
   
   future_mass_recycle_total <- future_mass_recycle_chem %>%
     group_by(Year) %>%
@@ -1324,7 +994,7 @@ export_lost <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
   #     cumsum(Total_Minerals_Exported)
   # ) %>%
   # ungroup() %>%
-  filter(Total_Minerals_Exported > 0) %>%
+  filter(Total_Minerals_Exported >= 0) %>%
   mutate(Year = as.numeric(Year)) %>%
   mutate(Scenario = factor(Scenario, levels = legend_order))
 
@@ -1334,7 +1004,7 @@ ggplot(
   nat_cap_chem_rec,
   aes(
     x = as.character(Year),
-    y = Tonne,
+    y = Tonne/1000,
     color = Scenario,                
     alpha = `Recycling Scenario`,    
     group = interaction(Scenario, `Recycling Scenario`)  
@@ -1347,7 +1017,7 @@ ggplot(
   labs(
     title = "North America Available Recycled Minerals Until 2035 by Mineral",
     x = "Year",
-    y = "Recycled Minerals (Metric Tonnes)",
+    y = "Recycled Minerals (thousands Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario",
     alpha = "Recycling Scenario"
   ) +
@@ -1393,7 +1063,7 @@ ggplot(
   non_recovery_lost,
   aes(
     x = as.character(Year),
-    y = Cum_Tonne,
+    y = Cum_Tonne/1000,
     group = interaction(Mineral, Scenario),
     color = Scenario,
   ) 
@@ -1404,7 +1074,7 @@ ggplot(
   labs(
     title = "Cumulative North America Minerals Lost to Lack of Recovery Standards",
     x = "Year",
-    y = "Lost Minerals (Metric Tonnes)",
+    y = "Lost Minerals (thousands Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario"
   ) +
   theme_minimal(base_size = 14) +  # larger base font
@@ -1506,7 +1176,7 @@ scenario_base_colors <- c(
 
 ggplot(export_lost, aes(
   x = Year,
-  y = Total_Minerals_Exported, 
+  y = Total_Minerals_Exported/1000, 
   color = Scenario,
   group = Scenario
 )) + geom_line(size = 1.2) +
@@ -1516,7 +1186,7 @@ ggplot(export_lost, aes(
   labs(
     title = "Exported Mass of Battery Minerals Each Year",
     x = "Year",
-    y = "Exported Minerals (Metric Tonnes)",
+    y = "Exported Minerals (thousands of Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario") +
   theme_minimal(base_size = 14) +
   theme(
@@ -1534,10 +1204,7 @@ ggplot(export_lost, aes(
   )
 
 
-
-
 ##IGNORE
-# 
 # summary_final_future_hist <- cap_chem_results %>%
 #   group_by(Scenario, Year, State, Mineral) %>%
 #   summarise(
@@ -1640,4 +1307,8 @@ ggplot(export_lost, aes(
 # dev.off()
 # 
 # ##Manufacturing and Recycling capacity by state
-# 
+
+
+Continent_LIB_Recycle <- future_recycle_type %>% group_by(Year) %>% summarise(all_recycle = sum(LIB_recycle_total))
+Continent_Demand <- state_capacity_added %>% group_by(Year) %>% summarise(all_demand = sum(Total_Add_LIB))
+ratio_in_batts <- Continent_LIB_Recycle %>% merge(Continent_Demand, on = "Year") %>% mutate(percent = Continent_LIB_Recycle/Continent_Demand)

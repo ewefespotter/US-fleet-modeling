@@ -14,32 +14,166 @@ library(ggplot2)
 library(geofacet)
 
 
+### open vs planned
+state_map <- c(
+  # US states
+  AL = "Alabama", AK = "Alaska", AZ = "Arizona", AR = "Arkansas",
+  CA = "California", CO = "Colorado", CT = "Connecticut", DE = "Delaware", DC = "District of Columbia",
+  FL = "Florida", GA = "Georgia", HI = "Hawaii", ID = "Idaho",
+  IL = "Illinois", IN = "Indiana", IA = "Iowa", KS = "Kansas",
+  KY = "Kentucky", LA = "Louisiana", ME = "Maine", MD = "Maryland",
+  MA = "Massachusetts", MI = "Michigan", MN = "Minnesota", MS = "Mississippi",
+  MO = "Missouri", MT = "Montana", NE = "Nebraska", NV = "Nevada",
+  NH = "New Hampshire", NJ = "New Jersey", NM = "New Mexico", NY = "New York",
+  NC = "North Carolina", ND = "North Dakota", OH = "Ohio", OK = "Oklahoma",
+  OR = "Oregon", PA = "Pennsylvania", RI = "Rhode Island", SC = "South Carolina",
+  SD = "South Dakota", TN = "Tennessee", TX = "Texas", UT = "Utah",
+  VT = "Vermont", VA = "Virginia", WA = "Washington", WV = "West Virginia",
+  WI = "Wisconsin", WY = "Wyoming",
+  
+  # Canadian provinces and territories
+  AB = "Alberta", BC = "British Columbia", MB = "Manitoba", NB = "New Brunswick",
+  NL = "Newfoundland and Labrador", NS = "Nova Scotia", ON = "Ontario", PE = "Prince Edward Island",
+  QC = "Quebec", SK = "Saskatchewan", NT = "Northwest Territories", NU = "Nunavut",
+  YT = "Yukon",
+  
+  MX = "Mexico"
+)
+
+state_map_rev <- setNames(names(state_map), state_map)
+
 ##Manufacturing
-EVLIB_Flows <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv")
-EV_Flows <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EVLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
-  rename(BEV = add_BEV, PHEV = add_PHEV) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
   pivot_longer(cols = c(BEV, PHEV),
                names_to = "Propulsion",
                values_to = "Add_EV")
 
-EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") 
+EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
 EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
-  rename(BEV = add_BEV, PHEV = add_PHEV) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
   pivot_longer(cols = c(BEV, PHEV),
                names_to = "Propulsion",
                values_to = "Add_EV")
 
-EV_Flows <- bind_rows(EV_Flows, EV_Flows_CA)
-EVLIB_Flows <- bind_rows(EVLIB_Flows, EVLIB_Flows_CA)
+EVLIB_Flows <- bind_rows(EVLIB_Flows_US, EVLIB_Flows_CA)
 
-data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
-mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
-  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))%>%
-  rename("Cathode Mix" = chemistry)
+start_year <- 2020
+
+name_vector_with_years <- function(vec_string, start_year) {
+  # Make sure it's a string
+  vec_string <- as.character(vec_string)
+  
+  # Split and convert to numeric
+  vec <- as.numeric(strsplit(vec_string, "\\|")[[1]])
+  
+  # Assign year names (increasing years)
+  names(vec) <- start_year - (seq_along(vec) - 1)
+  
+  return(vec)
+}
+
+# Apply to each row using Map
+EVLIB_Flows$LIB_recycling_vector <- Map(
+  name_vector_with_years,
+  EVLIB_Flows$LIB_recycling_vector,
+  EVLIB_Flows$Year
+)
+
+future_recycle_type <- EVLIB_Flows %>%
+  mutate(
+    recycle_df = map(LIB_recycling_vector, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        LIB_recycle_total = as.numeric(.x)
+      )
+    })
+  ) %>%
+  select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
+  unnest(cols = recycle_df) 
+
+EV_Flows <- bind_rows(EV_Flows_US, EV_Flows_CA)
+
+## proportion of propulsion and segment recycled LIBs by sale_year and year (hist and future included)
+recycle_propulsion_segment_prop <- future_recycle_type %>% 
+  group_by(Year, Sale_Year, Segment, Propulsion) %>%
+  summarise(
+    LIB_recycle_total = sum(LIB_recycle_total, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% group_by(Year, Sale_Year) %>%
+  mutate(percent  = LIB_recycle_total/sum(LIB_recycle_total)) %>%
+  select(Year, Sale_Year, Segment, Propulsion, percent) %>%
+  mutate(percent = replace(percent, is.nan(percent), 0))
+
+## proportions of propulsion and segment demanded LIBs by year (just future - no replacements)
+demand_propulsion_segment_prop <- EV_Flows %>%
+  group_by(Year, Segment, Propulsion) %>%
+  summarise(
+    Add_EV = sum(Add_EV, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(Year) %>%
+  mutate(percent = Add_EV/sum(Add_EV)) %>%
+  select(Year, Segment, Propulsion, percent) %>%
+  mutate(percent = replace(percent, is.nan(percent), 0))
+
+MX_dereg <- read_csv(file.path(data_folder, "Mexico_Dereg_EV_vectors_USsurvival.csv"), na = "") %>%
+  select(Year, Dereg_Total_Vec, Reg_NewEV_Count, Reg_SHEV_Count) %>%
+  rowwise() %>%
+  mutate(
+    Total_vec = list({
+      v <- as.numeric(strsplit(Dereg_Total_Vec, "\\|")[[1]])
+      names(v) <- Year - (seq_along(v) - 1)
+      v
+    })
+  ) %>%
+  ungroup()  %>%
+  mutate(
+    total_df = map(Total_vec, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        Total_retire = as.numeric(.x)
+      )
+    })
+  ) %>%
+  mutate(NewEV_Sales_veh = Reg_NewEV_Count + Reg_SHEV_Count) %>%
+  select(Year, total_df, NewEV_Sales_veh) %>%
+  unnest(total_df)
+
+## get with proportions
+EVLIB_Recycle_MX <- MX_dereg %>% 
+  left_join(recycle_propulsion_segment_prop, by =c("Sale_Year","Year")) %>% 
+  mutate(LIB_recycle_total = Total_retire * percent,
+         State_Province = "MX") %>% 
+  filter(!is.na(LIB_recycle_total)) %>%
+  select(Year, State_Province, Sale_Year, Segment,Propulsion, LIB_recycle_total)
+
+## get with proportions (all sale years together)
+EV_Flows_MX <- MX_dereg %>%
+  select(-c(Total_retire,Sale_Year)) %>%
+  group_by(Year) %>%
+  summarise(NewEV_Sales_veh = first(NewEV_Sales_veh)) %>%
+  left_join(demand_propulsion_segment_prop, by = c("Year")) %>%
+  mutate(
+    Add_EV = NewEV_Sales_veh * percent,
+    State_Province = "MX"
+  ) %>%
+  filter(!is.na(Add_EV)) %>%
+  select(Year, State_Province, Segment, Propulsion, Add_EV) 
+
+
+future_recycle_type <- bind_rows(future_recycle_type, EVLIB_Recycle_MX)
+EV_Flows <- bind_rows(EV_Flows, EV_Flows_MX)
+
 
 ##RECYCLING
 recycling_cap <- read_excel(file.path(data_folder, "NA recycling facilities.xlsx")) %>%
@@ -203,8 +337,6 @@ recycling_tonnes_total <- recycling_tonnes_by_state %>% group_by(Year) %>%
             Delay_Cumulative_refining_cap = sum(Delay_Cumulative_refining_cap, na.rm = TRUE)) %>%
   mutate(Full_Recycle = case_when(Cumulative_refining_cap > Cumulative_black_mass_cap ~ Cumulative_black_mass_cap, TRUE ~ Cumulative_refining_cap)) %>%
   mutate(Delay_Full_Recycle = case_when(Delay_Cumulative_refining_cap > Delay_Cumulative_black_mass_cap ~ Delay_Cumulative_black_mass_cap, TRUE ~ Delay_Cumulative_refining_cap))
-
-
 
 ##MANUFACTURING
 ###LCO https://www.fluxpower.com/blog/what-is-the-energy-density-of-a-lithium-ion-battery?utm_source=chatgpt.com
@@ -394,14 +526,16 @@ all_manu_chem <- all_manu_chem %>%
 ## Still need the year delay 
 ##FIND MANUFACTURING 20% adjustment based on 2028 fraction of consumption
 
-### GET new EV_flows
-state_capacity_added <- EVLIB_Flows %>% group_by(State, Year, Propulsion, Segment) %>% 
+### GET new Total LIB Flows ==> replacements only US and Canada
+state_capacity_added <- EVLIB_Flows %>% group_by(State_Province, Year, Propulsion, Segment) %>% 
   summarise(LIB_new_add = sum(LIB_new_add, na.rm = TRUE)) %>%
-  left_join (EV_flows, by = c("State", "Year", "Segment", "Propulsion")) %>%
+  full_join (EV_Flows, by = c("State_Province", "Year", "Segment", "Propulsion")) %>%
+  mutate(LIB_new_add = if_else(is.na(LIB_new_add), 0, LIB_new_add)) %>%
   mutate(Total_Add_LIB = LIB_new_add + Add_EV) %>%
-  select(State, Year, Segment, Propulsion, Total_Add_LIB)
+  select(State_Province, Year, Segment, Propulsion, Total_Add_LIB)
 
-###from future recycling mins
+
+###from FUTURE RECYCLING MINS
 caps_projected <- batt_cap_projection %>% 
   select(Sale_Year, Segment, Propulsion, `Projected Avg Batt Cap (kwh/batt)`) %>% 
   rename(Year = Sale_Year) %>% 
@@ -427,15 +561,15 @@ state_cap_add <- state_capacity_added %>%
   mutate(Add_LIB_Gwh_proj = Avg_Cap_Proj * Total_Add_LIB/1e6) %>%
   mutate(Add_LIB_Gwh_15 = Avg_Cap_15 *Total_Add_LIB/1e6) %>% 
   filter(Year >= 2025) %>%
-  select(State, Year, Propulsion, Segment, Add_LIB_Gwh_15, Add_LIB_Gwh_proj) %>%
-  group_by(State, Year) %>%
+  select(State_Province, Year, Propulsion, Segment, Add_LIB_Gwh_15, Add_LIB_Gwh_proj) %>%
+  group_by(State_Province, Year) %>%
   summarise(
     Add_LIB_Gwh_proj = sum(Add_LIB_Gwh_proj, na.rm = TRUE),
     Add_LIB_Gwh_15   = sum(Add_LIB_Gwh_15,   na.rm = TRUE)
   )%>%
-  mutate(State = case_when(
-    State %in% names(state_map_rev) ~ state_map_rev[State],
-    TRUE ~ State   # leave unchanged if no match
+  mutate(State_Province = case_when(
+    State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
+    TRUE ~ State_Province   # leave unchanged if no match
   )) 
 
 ### DEMAND IN TONNES
@@ -454,13 +588,12 @@ state_cap_chem_tonne <- state_cap_add %>%
     Add_LIB_15_tonnes = (Add_LIB_Gwh_15_chem*Pack_kg_Gwh)/1000,
     Add_LIB_proj_LFP_tonnes = (Add_LIB_Gwh_proj_LFP*Pack_kg_Gwh)/1000,
     Add_LIB_15_LFP_tonnes = (Add_LIB_Gwh_15_LFP*Pack_kg_Gwh)/1000
-  ) %>% group_by(Year, State) %>%
+  ) %>% group_by(Year, State_Province) %>%
   summarise(Add_LIB_proj_tonnes = sum(Add_LIB_proj_tonnes, na.rm = TRUE),
             Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE),
             Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
             Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE)) %>% 
-  select(Year, State, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, Add_LIB_proj_LFP_tonnes, Add_LIB_15_LFP_tonnes) %>%
-  rename(State_Province = State)
+  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, Add_LIB_proj_LFP_tonnes, Add_LIB_15_LFP_tonnes) 
 
 state_demand_tonnes_2030 <- state_cap_chem_tonne %>% filter(Year == 2030) 
 

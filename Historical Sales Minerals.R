@@ -6,6 +6,11 @@ library(stringr)
 library(purrr)
 ### Uses EV Volumes battery capacity and chemistry on
 
+data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
+mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
+  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))%>%
+  rename("Cathode Mix" = chemistry)
+
 EVLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv")
 EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") 
 EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_hist, EVLIB_Flows_CA_hist)
@@ -43,7 +48,9 @@ hist_recycle_type <- EVLIB_Flows_hist %>%
     })
   ) %>%
   select(State, Segment, Propulsion, Year, recycle_df)  %>% # keep original Year here
-  unnest(cols = recycle_df)
+  unnest(cols = recycle_df) %>% 
+  filter(Sale_Year <= 2025,
+         Propulsion != "FCEV")
 
 
 ###CHEMISTRY
@@ -229,8 +236,6 @@ hist_recycle_chem <- hist_recycle_chem %>%
   select(Year, Sale_Year, State, `Cathode Mix`, Cathode_kwh_state, LIB_recycle_kwh) %>% 
   rename(State_Province = State) 
 
-mineral_intensity <- mineral_intensity %>%
-  rename(`Cathode Mix` = chemistry)
 
 hist_final <- left_join(prep_for_min, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
   mutate(`Available Recycled Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
