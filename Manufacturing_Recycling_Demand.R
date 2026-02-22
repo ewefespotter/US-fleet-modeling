@@ -65,8 +65,13 @@ EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pab
                names_to = "Propulsion",
                values_to = "Add_EV")
 
-EVLIB_Flows <- bind_rows(EVLIB_Flows_US, EVLIB_Flows_CA)
 
+BESSLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
+
+
+EVLIB_Flows <- bind_rows(EVLIB_Flows_US, EVLIB_Flows_CA)
 start_year <- 2020
 
 name_vector_with_years <- function(vec_string, start_year) {
@@ -89,6 +94,13 @@ EVLIB_Flows$LIB_recycling_vector <- Map(
   EVLIB_Flows$Year
 )
 
+BESSLIB_Flows_US$LIB_recycling_vector <- Map(
+  name_vector_with_years,
+  BESSLIB_Flows_US$LIB_recycling_vector,
+  BESSLIB_Flows_US$Year
+)
+
+
 future_recycle_type <- EVLIB_Flows %>%
   mutate(
     recycle_df = map(LIB_recycling_vector, ~ {
@@ -100,6 +112,23 @@ future_recycle_type <- EVLIB_Flows %>%
   ) %>%
   select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
   unnest(cols = recycle_df) 
+
+BESS_future_recycle_type <- BESSLIB_Flows_US %>%
+  mutate(
+    recycle_df = map(LIB_recycling_vector, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        LIB_recycle_total = as.numeric(.x)
+      )
+    })
+  ) %>%
+  select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
+  unnest(cols = recycle_df) 
+
+future_recycle_type <- full_join(future_recycle_type, BESS_future_recycle_type, by = c("State_Province","Segment","Propulsion","Year","Sale_Year")) %>%
+  mutate(across(everything(), ~ replace_na(.x, 0))) %>%
+  mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y) %>%
+  select(-c(LIB_recycle_total.x, LIB_recycle_total.y))
 
 EV_Flows <- bind_rows(EV_Flows_US, EV_Flows_CA)
 
@@ -174,6 +203,15 @@ EV_Flows_MX <- MX_dereg %>%
 future_recycle_type <- bind_rows(future_recycle_type, EVLIB_Recycle_MX)
 EV_Flows <- bind_rows(EV_Flows, EV_Flows_MX)
 
+scrap_by_mass = read_csv(file.path(data_folder, "Scrap_by_Mass (-Energy).csv"), na = "") %>%
+  select(Chemistry, `Total Mass`, `Cell Mass`, `Pack Mass`) %>%   
+  filter(!is.na(Chemistry), !is.na(`Total Mass`), !is.na(`Cell Mass`)) %>%
+  mutate(Total_Cell_Mass_per_Year = `Cell Mass` * 211000000, ## cells per year from batpac
+         Scrap_rate_kg_per_kg_cell = `Total Mass`/Total_Cell_Mass_per_Year,
+         Cell_Pack = `Cell Mass`*400/`Pack Mass`) %>%
+  #select(Chemistry, Scrap_rate_kg_per_kg_cell) %>%
+  mutate(Avg = sum(Scrap_rate_kg_per_kg_cell)/9,
+         Cell_Pack = sum(Cell_Pack)/9)
 
 ##RECYCLING
 recycling_cap <- read_excel(file.path(data_folder, "NA recycling facilities.xlsx")) %>%
@@ -369,6 +407,7 @@ specific_energy <- specific_energy %>%
 # Define years
 scrap_rate <- seq(0.0767, 0.0434, length.out = 6)
 
+## in Gwh
 all_manufacturing <- read.xlsx("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Manu_Down_Mid.xlsx", sheet = "changed dates Narrowed Manu fac") %>%
   select(Year.online, Production.Capacity, Company, Facility.State.or.Province, Supply.Chain.Segment, Chemistry) %>%
   mutate(Gwh_yr = as.numeric(Production.Capacity)) %>%
@@ -386,6 +425,7 @@ all_manufacturing <- read.xlsx("/Users/elsawefes-potter/Documents/Critical_Miner
   mutate(Downstream = Downstream *0.77,
          Midstream = Midstream * 0.77)
   
+
 delayed_manufacturing <- all_manufacturing %>%
   mutate(
     Year_Online = case_when(
@@ -408,6 +448,8 @@ calendar_delayed <- expand_grid(
 
 decline_years <- 6
 ### keep at by year_online?--> how does this impact with the projection
+
+## currently do scrap rate of kwh and then convert w specific energy (will just do mass scrapped per kwh --> no conversion)
 all_manufacturing_expanded <- calendar %>%
   left_join(all_manufacturing, by = "State_Province", relationship = "many-to-many") %>%
   arrange(State_Province, Year) %>%
@@ -416,13 +458,13 @@ all_manufacturing_expanded <- calendar %>%
     Production_Adjusted_Down = ifelse(Year < Year_Online, 0, Downstream),
     Production_Adjusted_Mid = ifelse(Year < Year_Online, 0, Midstream),
     Scrap_Years = ifelse(Year >= Year_Online, Year - Year_Online + 1, NA),
-    # Scrap_Rate_Mid = if_else(
-    #   !is.na(Scrap_Years),
-    #   seq(0.0767, 0.0434, length.out = decline_years)[
-    #     pmin(Scrap_Years, decline_years)
-    #   ],
-    #   0
-    # ),
+    Scrap_Rate_Mid = if_else(
+      !is.na(Scrap_Years),
+      seq(0.1105567, 0.0772, length.out = decline_years)[
+        pmin(Scrap_Years, decline_years)
+      ],
+      0
+    ),
     # 
     # Scrap_Rate_Down = if_else(
     #   !is.na(Scrap_Years),
@@ -431,7 +473,6 @@ all_manufacturing_expanded <- calendar %>%
     #   ],
     #   0
     # ),
-    Scrap_Rate_Mid = 0.0767,
     Scrap_Rate_Down = 0.05,
     Gwh_Scrap_Down = Production_Adjusted_Down * Scrap_Rate_Down,
     Production_After_Scrap_Down = Production_Adjusted_Down * (1 - Scrap_Rate_Down),

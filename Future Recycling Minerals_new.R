@@ -23,14 +23,15 @@ library(colorspace)
 
 
 ## DATA INPUTS
-### Start up phase of 4 years starts at about 20 on average and decreases to 4-12%
+### Start up phase of 4 years starts at about 20 on average and decreases to 4-12
+mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
+  rename(`Cathode Mix` = chemistry)
 batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% 
   select(where(~ !all(is.na(.)))) 
 colnames(batpac_scrap_min) <- c("Product_Abbrev", "Mineral", "Value")
 batpac_scrap_min <- batpac_scrap_min %>%
   mutate(`kg/Gwh` = Value/50) 
 #(kg/yr) *1/(50000000 kwh/yr) * 1000000 kwh/Gwh
-
 
 
 ## Minerals
@@ -43,6 +44,7 @@ mineral_map <- c(
   "Al, kg/yr" = "Aluminum",
   "Cu, kg/yr" = "Copper"
 )
+
 batpac_scrap_min <- batpac_scrap_min %>%
   mutate(Mineral = recode(Mineral, !!!mineral_map),
          Product_Abbrev = str_trim(Product_Abbrev), 
@@ -489,16 +491,18 @@ batt_cap_15_ext <- batt_cap_15_ext %>%
 batt_scen <- list(batt_cap_proj_ext, batt_cap_15_ext) 
 chem_scens <- list(future_match, final_adjusted_mix_extended)
 
-
+### DON't RUN
 future_recycle_type_collection <- future_recycle_type %>%  mutate(State_Province = case_when(
   State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
   TRUE ~ State_Province))  %>% filter(Sale_Year > 2025) %>%
   mutate(Sale_Year = as.integer(Sale_Year))
 
+### MISSING DATA
 
 ### Assumes manufacturing scrap is recycled anywhere and batteries are recycled anywhere
 ### this doesn't track where the recycling or manufacturing is happening
 ## Assume 100% collection
+
 
 ### RUN SCENARIOS
 capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, future_recycle_type_collection) {
@@ -554,7 +558,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   
   ## assuming no improvements in energy density 
   future_mass_recycle_chem <- future_recycle_chem%>% inner_join(specific_energy, by = "Cathode Mix") %>% 
-    mutate(Batt_Mass_MT = LIB_recycle_kwh * Cell_kg_kwh/1000) ##check all chems have smth
+    mutate(Batt_Mass_MT = LIB_recycle_kwh * Pack_kg_kwh/1000) ##check all chems have smth
   
   future_mass_recycle_total <- future_mass_recycle_chem %>%
     group_by(Year) %>%
@@ -575,21 +579,21 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   batt_df_nat_scrap <- batt_cap_df %>% group_by(Year) %>% 
     summarise(Scrap_tonnes = first(Scrap_tonnes), .groups = "drop")
   
-  
+  ### the black mass facility takes off the pack materials and can handle 70% of caacity in cell materials
+  ## Here introduce the pack equivalents for scrap (cell processing capacity smaller)
   Available_Recycling_Capacity <- US_CA_Recycle %>% 
     inner_join(batt_df_nat_scrap, by = "Year") %>% 
     mutate(
-      Leftover_blackmass_cap = pmax(Black_Mass_MT - Scrap_tonnes, 0),
+      Leftover_blackmass_cap = pmax(Black_Mass_MT - Scrap_tonnes/0.7078558, 0),
       #Leftover_refining_cap  = pmax(Refining_MT - Scrap_proj_tonnes, 0),
-      Leftover_Full_Recycle = pmax(Full_Recycle - Scrap_tonnes, 0), ## This has a variable constraint black mass when this is lowest and refining when that is lowest
+      Leftover_Full_Recycle = pmax(Full_Recycle - Scrap_tonnes/0.7078558, 0), ## This has a variable constraint black mass when this is lowest and refining when that is lowest
       
+      Scrap_full_recycle_percent = pmin(Full_Recycle/Scrap_tonnes/0.7078558,1),
+      Unprocessed_Scrap = pmax(Scrap_tonnes/0.7078558-Black_Mass_MT,0),
+      Unrefined_Scrap = pmax(Scrap_tonnes/0.7078558-Full_Recycle,0), ## all unrefined also from not processed
       
-      Scrap_full_recycle_percent = pmin(Full_Recycle/Scrap_tonnes,1),
-      Unprocessed_Scrap = pmax(Scrap_tonnes-Black_Mass_MT,0),
-      Unrefined_Scrap = pmax(Scrap_tonnes-Full_Recycle,0), ## all unrefined also from not processed
-      
-      Unprocessed_Scrap_percent = 1- pmin(Black_Mass_MT/Scrap_tonnes, 1),
-      Exported_BM_Scrap_percent = pmax((Scrap_tonnes - Unprocessed_Scrap - Full_Recycle),0)/Scrap_tonnes,
+      Unprocessed_Scrap_percent = 1- pmin(Black_Mass_MT/Scrap_tonnes/0.7078558, 1),
+      Exported_BM_Scrap_percent = pmax((Scrap_tonnes/0.7078558 - Unprocessed_Scrap - Full_Recycle),0)/(Scrap_tonnes/0.7078558),
       
       
     )  %>%
@@ -607,7 +611,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
       
       ## Recycling Needs
       Unused_Black_Mass = pmax(Leftover_blackmass_cap- Batt_Mass_MT,0),
-      Unused_Refining = pmax(Refining_MT - pmin((Batt_Mass_MT + Scrap_tonnes)/Full_Recycle,1)*Full_Recycle,0),
+      Unused_Refining = pmax(Refining_MT - pmin((Batt_Mass_MT + Scrap_tonnes/0.7078558)/Full_Recycle,1)*Full_Recycle,0),
       
       Needed_Black_Mass_change = (Unprocessed_Batts + Unprocessed_Scrap - Unused_Black_Mass), 
       Needed_Refining_change = (Unrefined_Batts + Unrefined_Scrap - Unused_Refining)

@@ -12,7 +12,6 @@ library(ggforce)
 ## All replacement EVLIBs and new EV from EV_Flow
 future_demand_type <-state_capacity_added
 
-
 future_demand_type <- state_capacity_added %>%
   mutate(
     Year = as.integer(Year),

@@ -11,8 +11,8 @@ library(stringr)         # Load the stringr package
 library(dplyr)
 library(tidyr)
 library(purrr)
-
-
+library(writexl)
+library(colorspace)
 
 
 data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"

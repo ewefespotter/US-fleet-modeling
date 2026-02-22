@@ -8,12 +8,19 @@ library(purrr)
 
 data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
 mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
-  filter(!Mineral %in% c("Phosphorus", "Stainless steel"))%>%
-  rename("Cathode Mix" = chemistry)
+  filter(!Mineral %in% c("Phosphorus", "Stainless steel")) %>%
+  rename(`Cathode Mix` = chemistry)
 
-EVLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv")
-EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") 
-EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_hist, EVLIB_Flows_CA_hist)
+EVLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
+
+
+EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_US_hist, EVLIB_Flows_CA_hist)
 # Starting year
 start_year <- 2020
 
@@ -37,6 +44,13 @@ EVLIB_Flows_hist$LIB_recycling_vector <- Map(
   EVLIB_Flows_hist$Year
 )
 
+BESSLIB_Flows_US_hist$LIB_recycling_vector <- Map(
+  name_vector_with_years,
+  BESSLIB_Flows_US$LIB_recycling_vector,
+  BESSLIB_Flows_US$Year
+)
+
+
 
 hist_recycle_type <- EVLIB_Flows_hist %>%
   mutate(
@@ -47,10 +61,29 @@ hist_recycle_type <- EVLIB_Flows_hist %>%
       )
     })
   ) %>%
-  select(State, Segment, Propulsion, Year, recycle_df)  %>% # keep original Year here
+  select(State_Province, Segment, Propulsion, Year, recycle_df)  %>% # keep original Year here
   unnest(cols = recycle_df) %>% 
   filter(Sale_Year <= 2025,
-         Propulsion != "FCEV")
+         Propulsion != "FCEV") 
+
+BESS_hist_recycle_type <- BESSLIB_Flows_US_hist %>%
+  mutate(
+    recycle_df = map(LIB_recycling_vector, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        LIB_recycle_total = as.numeric(.x)
+      )
+    })
+  ) %>%
+  select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
+  unnest(cols = recycle_df) %>% 
+  filter(Sale_Year <= 2025,
+         Propulsion != "FCEV") %>%
+  mutate(across(everything(), ~ replace_na(.x, 0)))
+
+hist_recycle_type <- full_join(hist_recycle_type, BESS_hist_recycle_type, by = c("State_Province","Segment","Propulsion","Year","Sale_Year")) %>%
+  mutate(across(everything(), ~ replace_na(.x, 0))) %>%
+  mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y)
 
 
 ###CHEMISTRY
@@ -127,7 +160,7 @@ hist_recycle_cap$LIB_recycle_kwh <- hist_recycle_cap$LIB_recycle_total * hist_re
 
 # Keep only relevant columns
 hist_recycle_cap <- hist_recycle_cap %>%
-  select(`Year`, `Sale_Year`, State, `Segment`,`Propulsion`, 
+  select(`Year`, `Sale_Year`, State_Province, `Segment`,`Propulsion`, 
          `LIB_recycle_kwh`)
 
 
@@ -233,13 +266,12 @@ hist_recycle_chem$Cathode_kwh_state<- hist_recycle_chem$LIB_recycle_kwh * hist_r
 
 hist_recycle_chem <- hist_recycle_chem %>%
   mutate(Sale_Year = as.integer(Sale_Year)) %>%
-  select(Year, Sale_Year, State, `Cathode Mix`, Cathode_kwh_state, LIB_recycle_kwh) %>% 
-  rename(State_Province = State) 
+  select(Year, Sale_Year, State_Province, `Cathode Mix`, Cathode_kwh_state, LIB_recycle_kwh) 
 
 
-hist_final <- left_join(prep_for_min, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
+hist_final <- left_join(hist_recycle_chem, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
   mutate(`Available Recycled Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
-  select(`Sale_Year`, State, Mineral, `Year`, `Available Recycled Minerals (kg)`) %>% rename(State_Province = State)
+  select(`Sale_Year`, State_Province, Mineral, `Year`, `Available Recycled Minerals (kg)`) 
 
 hist_final <- hist_final %>%
   group_by(Year, State_Province, Mineral) %>%
