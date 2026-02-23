@@ -8,7 +8,6 @@ library(tidyverse)
 library(ggplot2)
 library(ggforce)
 
-
 ## All replacement EVLIBs and new EV from EV_Flow
 future_demand_type <-state_capacity_added
 

@@ -4,6 +4,7 @@ library(data.table)
 library(tidyr)
 library(stringr)
 library(purrr)
+library(openxlsx)
 ### Uses EV Volumes battery capacity and chemistry on
 
 data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
@@ -11,17 +12,62 @@ mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xls
   filter(!Mineral %in% c("Phosphorus", "Stainless steel")) %>%
   rename(`Cathode Mix` = chemistry)
 
-EVLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv") %>%
+
+
+##Manufacturing
+EVLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
+EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+  select(State, Segment, Year, add_BEV, add_PHEV) %>%
+  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
+  pivot_longer(cols = c(BEV, PHEV),
+               names_to = "Propulsion",
+               values_to = "Add_EV")
+
+
+EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+  select(State, Segment, Year, add_BEV, add_PHEV) %>%
+  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
+  pivot_longer(cols = c(BEV, PHEV),
+               names_to = "Propulsion",
+               values_to = "Add_EV")
+
+EVLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-ClosedLoop_StateTotals_ACCII.csv") %>%
+  select(State, Year, add_BEV, add_PHEV) %>%
+  group_by(State, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
+  pivot_longer(cols = c(BEV, PHEV),
+               names_to = "Propulsion",
+               values_to = "Add_EV")
+
+
+
+BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
+BESSLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
 
-EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_US_hist, EVLIB_Flows_CA_hist)
-# Starting year
+BESSLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
+
+EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_US_hist, EVLIB_Flows_CA_hist, EVLIB_Flows_MX_hist)
+EV_Flows_hist <- bind_rows(EV_Flows_US_hist, EV_Flows_CA_hist, EV_Flows_MX_hist)
+BESSLIB_Flows_hist <- bind_rows(BESSLIB_Flows_US_hist, BESSLIB_Flows_CA_hist, BESSLIB_Flows_MX_hist)
+
+
 start_year <- 2020
 
 name_vector_with_years <- function(vec_string, start_year) {
@@ -40,16 +86,15 @@ name_vector_with_years <- function(vec_string, start_year) {
 # Apply to each row using Map
 EVLIB_Flows_hist$LIB_recycling_vector <- Map(
   name_vector_with_years,
-  EVLIB_Flows_hist$LIB_recycling_vector,
-  EVLIB_Flows_hist$Year
+  EVLIB_Flows$LIB_recycling_vector,
+  EVLIB_Flows$Year
 )
 
-BESSLIB_Flows_US_hist$LIB_recycling_vector <- Map(
+BESSLIB_Flows_hist$LIB_recycling_vector <- Map(
   name_vector_with_years,
   BESSLIB_Flows_US$LIB_recycling_vector,
   BESSLIB_Flows_US$Year
 )
-
 
 
 hist_recycle_type <- EVLIB_Flows_hist %>%
@@ -61,12 +106,11 @@ hist_recycle_type <- EVLIB_Flows_hist %>%
       )
     })
   ) %>%
-  select(State_Province, Segment, Propulsion, Year, recycle_df)  %>% # keep original Year here
-  unnest(cols = recycle_df) %>% 
-  filter(Sale_Year <= 2025,
-         Propulsion != "FCEV") 
+  select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
+  unnest(cols = recycle_df) %>%
+  filter(Year <= 2025)
 
-BESS_hist_recycle_type <- BESSLIB_Flows_US_hist %>%
+BESS_hist_recycle_type <- BESSLIB_Flows_hist %>%
   mutate(
     recycle_df = map(LIB_recycling_vector, ~ {
       tibble(
@@ -76,14 +120,14 @@ BESS_hist_recycle_type <- BESSLIB_Flows_US_hist %>%
     })
   ) %>%
   select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
-  unnest(cols = recycle_df) %>% 
-  filter(Sale_Year <= 2025,
-         Propulsion != "FCEV") %>%
-  mutate(across(everything(), ~ replace_na(.x, 0)))
+  unnest(cols = recycle_df) %>%
+  filter(Year <= 2025)
 
 hist_recycle_type <- full_join(hist_recycle_type, BESS_hist_recycle_type, by = c("State_Province","Segment","Propulsion","Year","Sale_Year")) %>%
   mutate(across(everything(), ~ replace_na(.x, 0))) %>%
-  mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y)
+  mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y) %>%
+  select(-c(LIB_recycle_total.x, LIB_recycle_total.y))
+
 
 
 ###CHEMISTRY

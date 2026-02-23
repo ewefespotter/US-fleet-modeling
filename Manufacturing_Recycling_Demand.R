@@ -43,20 +43,9 @@ state_map <- c(
 state_map_rev <- setNames(names(state_map), state_map)
 
 ##Manufacturing
-EVLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
-  select(State, Segment, Year, add_BEV, add_PHEV) %>%
-  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
-  rename(BEV = add_BEV, PHEV = add_PHEV,
-         State_Province = State) %>%
-  pivot_longer(cols = c(BEV, PHEV),
-               names_to = "Propulsion",
-               values_to = "Add_EV")
-
-EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
-  rename(State_Province = State)
-EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -66,12 +55,47 @@ EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pab
                values_to = "Add_EV")
 
 
-BESSLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+  select(State, Segment, Year, add_BEV, add_PHEV) %>%
+  group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
+  pivot_longer(cols = c(BEV, PHEV),
+               names_to = "Propulsion",
+               values_to = "Add_EV")
+
+EVLIB_Flows_MX <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-EVLIB_Flows_detail_ACCII.csv") %>%
+  rename(State_Province = State)
+EV_Flows_MX <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-ClosedLoop_StateTotals_ACCII.csv") %>%
+  select(State, Year, add_BEV, add_PHEV) %>%
+  group_by(State, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
+  rename(BEV = add_BEV, PHEV = add_PHEV,
+         State_Province = State) %>%
+  pivot_longer(cols = c(BEV, PHEV),
+               names_to = "Propulsion",
+               values_to = "Add_EV")
+
+
+
+BESSLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
+BESSLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
 
-EVLIB_Flows <- bind_rows(EVLIB_Flows_US, EVLIB_Flows_CA)
+BESSLIB_Flows_MX <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`)
+
+EVLIB_Flows <- bind_rows(EVLIB_Flows_US, EVLIB_Flows_CA, EVLIB_Flows_MX)
+EV_Flows <- bind_rows(EV_Flows_US, EV_Flows_CA, EV_Flows_MX)
+BESSLIB_Flows <- bind_rows(BESSLIB_Flows_US, BESSLIB_Flows_CA, BESSLIB_Flows_MX)
+
+
 start_year <- 2020
 
 name_vector_with_years <- function(vec_string, start_year) {
@@ -94,7 +118,7 @@ EVLIB_Flows$LIB_recycling_vector <- Map(
   EVLIB_Flows$Year
 )
 
-BESSLIB_Flows_US$LIB_recycling_vector <- Map(
+BESSLIB_Flows$LIB_recycling_vector <- Map(
   name_vector_with_years,
   BESSLIB_Flows_US$LIB_recycling_vector,
   BESSLIB_Flows_US$Year
@@ -113,7 +137,7 @@ future_recycle_type <- EVLIB_Flows %>%
   select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
   unnest(cols = recycle_df) 
 
-BESS_future_recycle_type <- BESSLIB_Flows_US %>%
+BESS_future_recycle_type <- BESSLIB_Flows %>%
   mutate(
     recycle_df = map(LIB_recycling_vector, ~ {
       tibble(
@@ -130,78 +154,7 @@ future_recycle_type <- full_join(future_recycle_type, BESS_future_recycle_type, 
   mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y) %>%
   select(-c(LIB_recycle_total.x, LIB_recycle_total.y))
 
-EV_Flows <- bind_rows(EV_Flows_US, EV_Flows_CA)
 
-## proportion of propulsion and segment recycled LIBs by sale_year and year (hist and future included)
-recycle_propulsion_segment_prop <- future_recycle_type %>% 
-  group_by(Year, Sale_Year, Segment, Propulsion) %>%
-  summarise(
-    LIB_recycle_total = sum(LIB_recycle_total, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% group_by(Year, Sale_Year) %>%
-  mutate(percent  = LIB_recycle_total/sum(LIB_recycle_total)) %>%
-  select(Year, Sale_Year, Segment, Propulsion, percent) %>%
-  mutate(percent = replace(percent, is.nan(percent), 0))
-
-## proportions of propulsion and segment demanded LIBs by year (just future - no replacements)
-demand_propulsion_segment_prop <- EV_Flows %>%
-  group_by(Year, Segment, Propulsion) %>%
-  summarise(
-    Add_EV = sum(Add_EV, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  group_by(Year) %>%
-  mutate(percent = Add_EV/sum(Add_EV)) %>%
-  select(Year, Segment, Propulsion, percent) %>%
-  mutate(percent = replace(percent, is.nan(percent), 0))
-
-MX_dereg <- read_csv(file.path(data_folder, "Mexico_Dereg_EV_vectors_USsurvival.csv"), na = "") %>%
-  select(Year, Dereg_Total_Vec, Reg_NewEV_Count, Reg_SHEV_Count) %>%
-  rowwise() %>%
-  mutate(
-    Total_vec = list({
-      v <- as.numeric(strsplit(Dereg_Total_Vec, "\\|")[[1]])
-      names(v) <- Year - (seq_along(v) - 1)
-      v
-    })
-  ) %>%
-  ungroup()  %>%
-  mutate(
-    total_df = map(Total_vec, ~ {
-      tibble(
-        Sale_Year = as.integer(names(.x)),
-        Total_retire = as.numeric(.x)
-      )
-    })
-  ) %>%
-  mutate(NewEV_Sales_veh = Reg_NewEV_Count + Reg_SHEV_Count) %>%
-  select(Year, total_df, NewEV_Sales_veh) %>%
-  unnest(total_df)
-
-## get with proportions
-EVLIB_Recycle_MX <- MX_dereg %>% 
-  left_join(recycle_propulsion_segment_prop, by =c("Sale_Year","Year")) %>% 
-  mutate(LIB_recycle_total = Total_retire * percent,
-         State_Province = "MX") %>% 
-  filter(!is.na(LIB_recycle_total)) %>%
-  select(Year, State_Province, Sale_Year, Segment,Propulsion, LIB_recycle_total)
-
-## get with proportions (all sale years together)
-EV_Flows_MX <- MX_dereg %>%
-  select(-c(Total_retire,Sale_Year)) %>%
-  group_by(Year) %>%
-  summarise(NewEV_Sales_veh = first(NewEV_Sales_veh)) %>%
-  left_join(demand_propulsion_segment_prop, by = c("Year")) %>%
-  mutate(
-    Add_EV = NewEV_Sales_veh * percent,
-    State_Province = "MX"
-  ) %>%
-  filter(!is.na(Add_EV)) %>%
-  select(Year, State_Province, Segment, Propulsion, Add_EV) 
-
-
-future_recycle_type <- bind_rows(future_recycle_type, EVLIB_Recycle_MX)
-EV_Flows <- bind_rows(EV_Flows, EV_Flows_MX)
 
 scrap_by_mass = read_csv(file.path(data_folder, "Scrap_by_Mass (-Energy).csv"), na = "") %>%
   select(Chemistry, `Total Mass`, `Cell Mass`, `Pack Mass`) %>%   
