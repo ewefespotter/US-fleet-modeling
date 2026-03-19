@@ -46,7 +46,6 @@ for (yr in names(mwh_year_groups)) {
  
 # Drop raw Reg and Mwh monthly columns -----
 usa_sales <- usa_sales %>% select(-all_of(c(reg_cols, mwh_cols)))
- 
 
 # Replace "NA" string in Cathode Mix -----
 usa_sales <- usa_sales %>%

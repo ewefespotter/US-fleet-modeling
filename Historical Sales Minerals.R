@@ -5,6 +5,8 @@ library(tidyr)
 library(stringr)
 library(purrr)
 library(openxlsx)
+library(readr)
+library(readxl)
 ### Uses EV Volumes battery capacity and chemistry on
 
 data_folder = "/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo"
@@ -13,11 +15,10 @@ mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xls
   rename(`Cathode Mix` = chemistry)
 
 
-
 ##Manufacturing
-EVLIB_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EV_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -27,9 +28,9 @@ EV_Flows_US <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pab
                values_to = "Add_EV")
 
 
-EVLIB_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EV_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -38,9 +39,9 @@ EV_Flows_CA <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pab
                names_to = "Propulsion",
                values_to = "Add_EV")
 
-EVLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_EVLIB_Flows_detail_ACCII.csv") %>%
   rename(State_Province = State)
-EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-ClosedLoop_StateTotals_ACCII.csv") %>%
+EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_ClosedLoop_StateTotals_ACCII.csv") %>%
   select(State, Year, add_BEV, add_PHEV) %>%
   group_by(State, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -51,17 +52,27 @@ EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Mineral
 
 
 
-BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
-BESSLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Canada-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
-BESSLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Data/Mexico-BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
+
+
+HDV_LIBFlows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_EV_Turnover_ACCII.csv") %>%
+  rename(`State_Province` = `State`) %>%
+  mutate(Segment = Vehicle) 
+
+HDV_BESSLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_BESS_Retire_ACCII.csv") %>%
+  rename(LIB_recycling_vector = BESS_retire_vector) %>%
+  rename(`State_Province` = `State`) %>%
+  mutate(Segment = Vehicle)
 
 EVLIB_Flows_hist <- bind_rows(EVLIB_Flows_US_hist, EVLIB_Flows_CA_hist, EVLIB_Flows_MX_hist)
 EV_Flows_hist <- bind_rows(EV_Flows_US_hist, EV_Flows_CA_hist, EV_Flows_MX_hist)
@@ -86,16 +97,27 @@ name_vector_with_years <- function(vec_string, start_year) {
 # Apply to each row using Map
 EVLIB_Flows_hist$LIB_recycling_vector <- Map(
   name_vector_with_years,
-  EVLIB_Flows$LIB_recycling_vector,
-  EVLIB_Flows$Year
+  EVLIB_Flows_hist$LIB_recycling_vector,
+  EVLIB_Flows_hist$Year
 )
 
 BESSLIB_Flows_hist$LIB_recycling_vector <- Map(
   name_vector_with_years,
-  BESSLIB_Flows_US$LIB_recycling_vector,
-  BESSLIB_Flows_US$Year
+  BESSLIB_Flows_hist$LIB_recycling_vector,
+  BESSLIB_Flows_hist$Year
 )
 
+HDV_LIBFlows_hist$LIB_recycling_vector <- Map(
+  name_vector_with_years,
+  HDV_LIBFlows_hist$LIB_recycling_vector,
+  HDV_LIBFlows_hist$Year
+) 
+
+HDV_BESSLIB_Flows_hist$LIB_recycling_vector <- Map(
+  name_vector_with_years,
+  HDV_BESSLIB_Flows_hist$LIB_recycling_vector,
+  HDV_BESSLIB_Flows_hist$Year
+) 
 
 hist_recycle_type <- EVLIB_Flows_hist %>%
   mutate(
@@ -108,7 +130,27 @@ hist_recycle_type <- EVLIB_Flows_hist %>%
   ) %>%
   select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
   unnest(cols = recycle_df) %>%
-  filter(Year <= 2025)
+  filter(Sale_Year <= 2025) %>%
+  filter(Year >= 2025)
+
+HDV_hist_recycle_type <- HDV_LIBFlows_hist %>%
+  mutate(
+    recycle_df = map(LIB_recycling_vector, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        LIB_recycle_total = as.numeric(.x)
+      )
+    })
+  ) %>%
+  select(State_Province, Segment, Year, recycle_df) %>% # keep original Year here
+  unnest(cols = recycle_df) %>%
+  filter(Sale_Year <= 2025)%>%
+  filter(Year >= 2025)%>%
+  group_by(State_Province, Year, Sale_Year) %>%
+  summarise(LIB_recycle_total = sum(LIB_recycle_total)) %>%
+  mutate(Propulsion = "HDV") %>%
+  mutate(Segment = "HDV") 
+
 
 BESS_hist_recycle_type <- BESSLIB_Flows_hist %>%
   mutate(
@@ -121,7 +163,35 @@ BESS_hist_recycle_type <- BESSLIB_Flows_hist %>%
   ) %>%
   select(State_Province, Segment, Propulsion, Year, recycle_df) %>%  # keep original Year here
   unnest(cols = recycle_df) %>%
-  filter(Year <= 2025)
+  filter(Sale_Year <= 2025) %>%
+  filter(Year >= 2025)
+
+
+HDV_BESS_hist_recycle_type <- HDV_BESSLIB_Flows_hist %>%
+  mutate(
+    recycle_df = map(LIB_recycling_vector, ~ {
+      tibble(
+        Sale_Year = as.integer(names(.x)),
+        LIB_recycle_total = as.numeric(.x)
+      )
+    })
+  ) %>%
+  select(State_Province, Segment, Year, recycle_df) %>%  # keep original Year here
+  unnest(cols = recycle_df) %>%
+  filter(Sale_Year <= 2025) %>%
+  filter(Year >= 2025)%>%
+  group_by(State_Province, Year, Sale_Year) %>%
+  summarise(LIB_recycle_total = sum(LIB_recycle_total)) %>%
+  mutate(Propulsion = "HDV") %>%
+  mutate(Segment = "HDV")
+
+
+
+hist_recycle_HDV <- full_join(HDV_hist_recycle_type, HDV_BESS_hist_recycle_type, by = c("State_Province","Segment","Propulsion","Year","Sale_Year")) %>%
+  mutate(across(everything(), ~ replace_na(.x, 0))) %>%
+  mutate(LIB_recycle_total = LIB_recycle_total.x+LIB_recycle_total.y) %>%
+  select(-c(LIB_recycle_total.x, LIB_recycle_total.y))
+
 
 hist_recycle_type <- full_join(hist_recycle_type, BESS_hist_recycle_type, by = c("State_Province","Segment","Propulsion","Year","Sale_Year")) %>%
   mutate(across(everything(), ~ replace_na(.x, 0))) %>%
@@ -129,6 +199,7 @@ hist_recycle_type <- full_join(hist_recycle_type, BESS_hist_recycle_type, by = c
   select(-c(LIB_recycle_total.x, LIB_recycle_total.y))
 
 
+hist_recycle_type <- bind_rows(hist_recycle_type, hist_recycle_HDV)
 
 ###CHEMISTRY
 # Group and sum
@@ -153,7 +224,8 @@ chem_Mwh <- chem_Mwh %>%
   mutate(across(everything(), ~ ifelse(is.infinite(.), 0, .)))
 
 chem_Mwh <- chem_Mwh %>%
-  rename(Segment = "Global Segment", Sale_Year = "Sale Year")
+  rename(Segment = "Global Segment", Sale_Year = "Sale Year") 
+  
 
 ### BATTERY CAPACITY
 # Group sales and MWh
@@ -171,8 +243,7 @@ batt_cap_Mwh <- usa_sales_filtered %>%
 batt_cap_merged <- merge(batt_cap_sales, batt_cap_Mwh, 
                          by = c("Sale Year", "Global Segment", "Propulsion"))
 
-batt_cap_merged <- batt_cap_merged %>%
-  mutate(`Avg Batt Cap (kwh/batt)` = (`Total Mwh` / `Total Sales`) * 1000)
+  
 
 # Pivot
 #batt_cap_merged <- batt_cap_merged %>%
@@ -181,12 +252,29 @@ batt_cap_merged <- batt_cap_merged %>%
 # Replace NA and -Inf with 0 (just in case)
 batt_cap_merged[is.na(batt_cap_merged)] <- 0
 batt_cap_merged <- batt_cap_merged %>%
-  mutate(across(everything(), ~ ifelse(is.infinite(.), 0, .)))
+  mutate(`Avg Batt Cap (kwh/batt)` = (`Total Mwh` / `Total Sales`) * 1000) %>%
+  mutate(across(everything(), ~ ifelse(is.infinite(.), 0, .))) %>%
+  rename(Segment = "Global Segment", Sale_Year = "Sale Year") %>%
+  mutate(
+    Sale_Year = as.integer(Sale_Year))
+    
 
-batt_cap_merged <- batt_cap_merged %>%
-  rename(Segment = "Global Segment", Sale_Year = "Sale Year")
+HDV_avg_cap_edit <- HDV_avg_cap %>% rename(Sale_Year = Year, `Avg Batt Cap (kwh/batt)` = Avg_kwh_unit) %>%
+  mutate(Segment = "HDV",
+         Propulsion = "HDV",
+         Sale_Year = as.numeric(Sale_Year)) %>%
+  mutate(
+    Sale_Year = as.integer(Sale_Year),
+    Propulsion = toupper(trimws(Propulsion)),
+    Segment = toupper(trimws(Segment))
+  ) %>% select(-c(Total_MWh, Total_Units))
 
-
+batt_cap_merged_w_HDV <- batt_cap_merged %>% select(-c("Total Sales","Total Mwh")) %>%
+  bind_rows(HDV_avg_cap_edit) %>%
+  arrange(Sale_Year, Segment, Propulsion) %>%
+  mutate(`Avg Batt Cap (kwh/batt)` = replace_na(`Avg Batt Cap (kwh/batt)`, 0))
+                                                    
+                                               
 # chem_Mwh <- chem_Mwh %>% 
 #   pivot_longer(
 #     cols = c(BEV, PHEV, FCEV),
@@ -196,8 +284,9 @@ batt_cap_merged <- batt_cap_merged %>%
 
 
 ### Apply disaggregations
+### Here hist_recycle_type has HDV sales from 2022 (Yunzhu) but EV volumes capacities etc from starting in sales year 2020 
 ###BATT CAP
-hist_recycle_cap <- merge(batt_cap_merged, hist_recycle_type, by = c("Sale_Year", "Segment", "Propulsion"), all.x = TRUE)
+hist_recycle_cap <- merge(batt_cap_merged_w_HDV, hist_recycle_type, by = c("Sale_Year", "Segment", "Propulsion"), all.x = TRUE)
 
 # Apply avg battery size per powertrain and type
 hist_recycle_cap$LIB_recycle_kwh <- hist_recycle_cap$LIB_recycle_total * hist_recycle_cap$`Avg Batt Cap (kwh/batt)`
@@ -294,9 +383,10 @@ mask_mins <- chem_Mwh$`Cathode Mix.x` %in%
 chem_Mwh$`Cathode Mix.x`[mask_mins] <- chem_Mwh$`Cathode Mix.y`[mask_mins]
 
 chem_Mwh <- chem_Mwh %>%
-  select(-`Cathode Mix.y`) %>%
-  rename(`Cathode Mix` = `Cathode Mix.x`)
-
+  select(-c(`Cathode Mix.y`, `Total Mwh`)) %>%
+  rename(`Cathode Mix` = `Cathode Mix.x`) %>%
+  mutate(Sale_Year = as.numeric(Sale_Year)) %>%
+  bind_rows(HDV_chem_hist)
 
 
 hist_recycle_chem <- merge(
@@ -305,7 +395,6 @@ hist_recycle_chem <- merge(
   by = c("Sale_Year", "Propulsion", "Segment"),
   all.x = TRUE)
 
-
 hist_recycle_chem$Cathode_kwh_state<- hist_recycle_chem$LIB_recycle_kwh * hist_recycle_chem$`Share of Avg Chem`
 
 hist_recycle_chem <- hist_recycle_chem %>%
@@ -313,16 +402,18 @@ hist_recycle_chem <- hist_recycle_chem %>%
   select(Year, Sale_Year, State_Province, `Cathode Mix`, Cathode_kwh_state, LIB_recycle_kwh) 
 
 
-hist_final <- left_join(hist_recycle_chem, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
-  mutate(`Available Recycled Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
-  select(`Sale_Year`, State_Province, Mineral, `Year`, `Available Recycled Minerals (kg)`) 
-
-hist_final <- hist_final %>%
-  group_by(Year, State_Province, Mineral) %>%
-  summarise(`Available Recycled Minerals (kg)` = sum(`Available Recycled Minerals (kg)`, na.rm = TRUE), .groups = "drop") %>%
-  filter(!is.na(`Mineral`))
 
 # 
+# hist_final <- left_join(hist_recycle_chem, mineral_intensity, by = "Cathode Mix", relationship = "many-to-many") %>%
+#   mutate(`Available Recycled Minerals (kg)` = `kg_per_kwh` * `Cathode_kwh_state`) %>%
+#   select(`Sale_Year`, State_Province, Mineral, `Year`, `Available Recycled Minerals (kg)`) 
+# 
+# hist_final <- hist_final %>%
+#   group_by(Year, State_Province, Mineral) %>%
+#   summarise(`Available Recycled Minerals (kg)` = sum(`Available Recycled Minerals (kg)`, na.rm = TRUE), .groups = "drop") %>%
+#   filter(!is.na(`Mineral`))
+
+
 # ### EDIT HIST ONE TO TAKE SCENARIOS
 # scenarios <- cap_chem_results %>%
 #   distinct(Battery_Scenario, Chemistry_Scenario) %>%

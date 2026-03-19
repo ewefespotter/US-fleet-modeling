@@ -10,11 +10,16 @@ library(tidyverse)
 library(writexl)
 library(colorspace)
 ### Run Order:      ##EV_Volumes_Clean
+                    ##HMDV
                     ##Historical Sales Minerals
                     ##Scenarios SetUp
+
                     ##Manufacturing_Recycling_Demand
                     ##Future Recycling Minerals
+                    ##Plotting_Demand_Recycle_Manu
                     ##Future Demand Minerals
+
+
                     ##Change to Delay at appropriate locations in following and run again
                           ## Manufacturing_Recycling_Demand
                           ## Future Recycling Minerals
@@ -22,11 +27,12 @@ library(colorspace)
                     ##Run all everything starting at Manufacturing_Recycling_Demand again w Repeal
 
 
+
 ## DATA INPUTS
 ### Start up phase of 4 years starts at about 20 on average and decreases to 4-12
 mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xlsx"), na = "") %>%
   rename(`Cathode Mix` = chemistry)
-batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_Scrap (-Energy BatPac).csv") %>% 
+batpac_scrap_min <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Mins_in_scrap (-Energy BatPac).csv") %>% 
   select(where(~ !all(is.na(.)))) 
 colnames(batpac_scrap_min) <- c("Product_Abbrev", "Mineral", "Value")
 batpac_scrap_min <- batpac_scrap_min %>%
@@ -50,7 +56,6 @@ batpac_scrap_min <- batpac_scrap_min %>%
          Product_Abbrev = str_trim(Product_Abbrev), 
          `kg/Gwh` = as.numeric(`kg/Gwh`))
 
-
 ###SIDEBAR getting batpac for NMCA from ratios for NMC 622 and NMCA in min intensity
 nmca_nmc <- mineral_intensity %>%
   filter(`Cathode Mix` %in% c("NMCA 89:4:4:3", "NMC 622"))
@@ -73,10 +78,9 @@ ratio_nmca_nmc <- summary_chem %>%
     ratio = as.numeric(ratio)
   )
 
-
-nmca_rows <- bat_pac %>%
+nmca_rows <- batpac_scrap_min %>%
   filter(Product_Abbrev == "NMC 622") %>%       
-  left_join(ratio_nmca_nmc, by = "Mineral") %>%
+  left_join(ratio_nmca_nmc, by = "Mineral")%>%
   mutate(
     Product_Abbrev = "NMCA",
     `kg/Gwh` = `kg/Gwh` * ratio
@@ -89,7 +93,9 @@ nmca_rows <- nmca_rows %>%
 # Combine original bat_pac with NMCA rows
 batpac_scrap_min_w_nmca <- bind_rows(batpac_scrap_min, nmca_rows)
 
-mins_in_scrap <- bat_pac_w_nmca %>% rename(`Cathode Mix` = Product_Abbrev) %>% select(-Value) %>% filter(!is.na(`Cathode Mix`))
+mins_in_scrap <- batpac_scrap_min_w_nmca %>% rename(`Cathode Mix` = Product_Abbrev) %>% 
+  select(-Value) %>% filter(!is.na(`Cathode Mix`))
+
 all_mins <- mineral_intensity %>% full_join(mins_in_scrap, by = c("Cathode Mix", "Mineral")) %>%
   mutate(
     kg_per_kwh = as.numeric(kg_per_kwh),
@@ -116,7 +122,7 @@ Delay_US_CA_Recycle <- recycling_tonnes_total %>% select(-c(Cumulative_black_mas
   ungroup()
   
 
-## REESTABLISH MANUFACTURING SHARES BY STATE AND CHEMISTRY BUT FOR PRODUCTION 
+## REESTABLISH MANUFACTURING SHARES BY STATE AND CHEMISTRY BUT FOR ALL PRODUCTION (not scrap vs prod)
 ## apply scrap through mineral intensity mins_in_scrap
 p_all_manufacturing <- calendar %>%
   left_join(all_manufacturing, by = "State_Province", relationship = "many-to-many") %>%
@@ -140,7 +146,7 @@ p_all_manufacturing <- calendar %>%
   ) %>%
   ungroup() %>%
   mutate(
-    State_Province = if_else(State_Province == "SLP ", "MX", State_Province)
+    State_Province = if_else(State_Province == "SLP", "MX", State_Province)
   )
 
 
@@ -166,7 +172,7 @@ p_delayed_manufacturing <- calendar_delayed %>%
   ) %>%
   ungroup() %>%
   mutate(
-    State_Province = if_else(State_Province == "SLP ", "MX", State_Province)
+    State_Province = if_else(State_Province == "SLP", "MX", State_Province)
   )
 
 
@@ -260,8 +266,8 @@ p_delayed_manufac_by_chem <-  tidyr::crossing(p_manu_delayed, all_manu_chem) %>%
   select(Year,`Cathode Mix`, Prod_proj_down, Prod_15_down, Prod_proj_mid, Prod_15_mid) 
 
 
-### MANUFACTURING
-all_manufacturing_expanded_complete_yrs <- p_all_manufacturing %>% filter(Year <= 2030) %>%
+### MANUFACTURING--complete years for shares per state
+all_manufacturing_expanded_complete_yrs <- p_all_manufacturing %>% filter(Year <= 2035) %>%
   group_by(State_Province) %>%
   # Ensure all years 2025–2050 exist for each state
   complete(Year = 2025:2050) %>%
@@ -269,7 +275,7 @@ all_manufacturing_expanded_complete_yrs <- p_all_manufacturing %>% filter(Year <
   fill(Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid, .direction = "down") %>%
   ungroup() %>% select(Year, State_Province, Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid)
 
-delayed_all_manufacturing_expanded_complete_yrs <- p_delayed_manufacturing %>% filter(Year <= 2032) %>%
+delayed_all_manufacturing_expanded_complete_yrs <- p_delayed_manufacturing %>% filter(Year <= 2040) %>%
   group_by(State_Province) %>%
   # Ensure all years 2025–2050 exist for each state
   complete(Year = 2025:2050) %>%
@@ -277,8 +283,7 @@ delayed_all_manufacturing_expanded_complete_yrs <- p_delayed_manufacturing %>% f
   fill(Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid, .direction = "down") %>%
   ungroup() %>% select(Year, State_Province, Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid)
 
-
-### HERE DECIDE IF PACK HAS ANY SCRAP
+## apply shares per state to chem level manufacturing
 ## Clean Manu (projected for now will do delayed as well) --> for tonnes of material
 p_clean_manu_projected_chem_state <- p_projected_manufac_by_chem %>% 
   left_join(all_manufacturing_expanded_complete_yrs, by="Year", relationship = "many-to-many") %>%
@@ -306,8 +311,7 @@ p_clean_manu_delayed_chem_state <- p_delayed_manufac_by_chem %>%
   fill (Year, State_Province, Prod_proj, Prod_15, .direction = "down") 
 
 
-## HERE FILL IN PACK SCRAP AGAIN?
-## THIS IS FROM JESS PROJECTIONS OF SCRAPPAGE BY WEIGHT
+##Taken from Manufacturing_Recycling_Demand (Tonnes of scrap going to BM and Refining)
 clean_manu_projected_tonnes <- tonnes_manufac_projected %>%
   mutate(Scrap_proj_tonnes =  Tonnes_Scrap_proj_mid,
          Scrap_15_tonnes =  Tonnes_Scrap_15_mid) %>%
@@ -345,7 +349,6 @@ delay_prod_15_Gwh_state <- p_clean_manu_delayed_chem_state %>%
   rename(Prod_Gwh_state = Prod_15)
 
 
-
 ### INTRODUCE THE SCRAP and DELAY into cap/chem scenarios
 batt_cap_project <- batt_cap_projection %>%
   left_join(scrap_proj_tonnes,by = "Sale_Year") %>%
@@ -376,8 +379,6 @@ batt_cap_15 <- batt_cap_15 %>%
     Scrap_tonnes, 
     Prod_Gwh_state
   )
-
-
 
 all_states <- tibble(
   State_Province = unique(c(unname(state_map_rev), "MX"))
@@ -487,22 +488,18 @@ batt_cap_15_ext <- batt_cap_15_ext %>%
     `Projected Avg Batt Cap (kwh/batt)`
   ) %>% mutate(Year = Sale_Year)
 
-
 batt_scen <- list(batt_cap_proj_ext, batt_cap_15_ext) 
-chem_scens <- list(future_match, final_adjusted_mix_extended)
+chem_scens <- list(future_match_HDV, final_adjusted_mix_extended)
 
-### DON't RUN
+
 future_recycle_type_collection <- future_recycle_type %>%  mutate(State_Province = case_when(
   State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
-  TRUE ~ State_Province))  %>% filter(Sale_Year > 2025) %>%
+  TRUE ~ State_Province))  %>% filter(Sale_Year >= 2025) %>%
   mutate(Sale_Year = as.integer(Sale_Year))
-
-### MISSING DATA
 
 ### Assumes manufacturing scrap is recycled anywhere and batteries are recycled anywhere
 ### this doesn't track where the recycling or manufacturing is happening
 ## Assume 100% collection
-
 
 ### RUN SCENARIOS
 capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, future_recycle_type_collection) {
@@ -525,7 +522,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
     future_recycle_cap$`Projected Avg Batt Cap (kwh/batt)`
   
   # Keep only useful column
-  future_recycle_cap <- future_recycle_cap %>% group_by(Year, Sale_Year, State_Province) %>%
+  future_recycle_cap <- future_recycle_cap %>% group_by(Year, Sale_Year, State_Province, Propulsion, Segment) %>%
     summarise(LIB_recycle_kwh = sum(LIB_recycle_kwh))
   
   
@@ -534,15 +531,16 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   
   nat_recycle_cap <- future_recycle_cap %>% group_by(Year) %>%
     summarise(LIB_recycle_Gwh = sum(LIB_recycle_kwh)/1e6)
-  View(nat_recycle_cap)
+
   
   ### APPLY BENCHMARK
   future_recycle_chem_fut <- future_recycle_cap %>%
-    left_join(chem_df, by = "Sale_Year", relationship = "many-to-many") %>%
+    left_join(chem_df, by = c("Sale_Year", "Propulsion","Segment"), relationship = "many-to-many") %>%
     mutate(Cathode_kwh_state = LIB_recycle_kwh * `Cathode Mix Share`) %>%
-    select(-`Cathode Mix Share`) 
+    group_by(Sale_Year, State_Province, Year, `Cathode Mix`) %>%
+    summarise(Cathode_kwh_state = sum(Cathode_kwh_state), .groups = "drop") 
   
-  
+
   future_recycle_chem <- bind_rows(hist_recycle_chem, future_recycle_chem_fut) %>%
     mutate(State_Province = case_when(
       State_Province %in% names(state_map_rev) ~ state_map_rev[State_Province],
@@ -552,17 +550,22 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
               LIB_recycle_kwh = sum(LIB_recycle_kwh, na.rm = TRUE)) %>%
     arrange(State_Province, Year)
   
-  
   fut_c_nat <- future_recycle_chem %>% group_by(Year) %>%
     summarise(Cathode_kwh_nat = sum(Cathode_kwh_state))
+
+  ## assuming no improvements in energy density (same every year)
+  future_mass_recycle_chem <- future_recycle_chem %>% inner_join(specific_energy, by = ("Cathode Mix"), relationship = "many-to-many") %>% 
+    mutate(Batt_Mass_MT = Cathode_kwh_state * Pack_kg_kwh/1000) ##check all chems have smth
   
-  ## assuming no improvements in energy density 
-  future_mass_recycle_chem <- future_recycle_chem%>% inner_join(specific_energy, by = "Cathode Mix") %>% 
-    mutate(Batt_Mass_MT = LIB_recycle_kwh * Pack_kg_kwh/1000) ##check all chems have smth
-  
+  ## national scale
   future_mass_recycle_total <- future_mass_recycle_chem %>%
     group_by(Year) %>%
     summarise(Batt_Mass_MT = sum(Batt_Mass_MT, na.rm = TRUE))
+  
+  state_mass_recycle_batt <- future_mass_recycle_chem %>%
+    group_by(Year, State_Province) %>%
+    summarise(Batt_Mass_MT = sum(Batt_Mass_MT, na.rm = TRUE))
+
   ## Assumption-- all manufacturing gets recycled no matter where produced or where recycle is, and each 
   ## battery has an equal chance of getting recycled regardless of where it is
   ## all recycling will be used if available-- currently 9.2%
@@ -578,19 +581,19 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   ## split not refined into what is turned to black mass and what is exported as batteries
   batt_df_nat_scrap <- batt_cap_df %>% group_by(Year) %>% 
     summarise(Scrap_tonnes = first(Scrap_tonnes), .groups = "drop")
-  
+
   ### the black mass facility takes off the pack materials and can handle 70% of caacity in cell materials
   ## Here introduce the pack equivalents for scrap (cell processing capacity smaller)
   Available_Recycling_Capacity <- US_CA_Recycle %>% 
     inner_join(batt_df_nat_scrap, by = "Year") %>% 
     mutate(
-      Leftover_blackmass_cap = pmax(Black_Mass_MT - Scrap_tonnes/0.7078558, 0),
+      Leftover_blackmass_cap = pmax(Black_Mass_MT - Scrap_tonnes/0.7078558, 0), ## 0.7078558 is ratio of cell to pack since it would only be cells going into BM facility but needs to be full batt equivalents
       #Leftover_refining_cap  = pmax(Refining_MT - Scrap_proj_tonnes, 0),
       Leftover_Full_Recycle = pmax(Full_Recycle - Scrap_tonnes/0.7078558, 0), ## This has a variable constraint black mass when this is lowest and refining when that is lowest
       
       Scrap_full_recycle_percent = pmin(Full_Recycle/Scrap_tonnes/0.7078558,1),
-      Unprocessed_Scrap = pmax(Scrap_tonnes/0.7078558-Black_Mass_MT,0),
-      Unrefined_Scrap = pmax(Scrap_tonnes/0.7078558-Full_Recycle,0), ## all unrefined also from not processed
+      Unprocessed_Scrap = pmax(Scrap_tonnes/0.7078558 - Black_Mass_MT,0),
+      Unrefined_Scrap = pmax(Scrap_tonnes/0.7078558 - Full_Recycle,0), ## all unrefined also from not processed
       
       Unprocessed_Scrap_percent = 1- pmin(Black_Mass_MT/Scrap_tonnes/0.7078558, 1),
       Exported_BM_Scrap_percent = pmax((Scrap_tonnes/0.7078558 - Unprocessed_Scrap - Full_Recycle),0)/(Scrap_tonnes/0.7078558),
@@ -650,7 +653,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
       
     ) %>% mutate(across(where(is.numeric), ~ ifelse(abs(.) < 1e-12, 0, .)))
   
-  
+  View(Available_Recycling_Capacity)
   batt_cap_state_scrap <- batt_cap_df %>% group_by(Year, `Cathode Mix`, State_Province) %>%
     summarise(Prod_Gwh_state = first(Prod_Gwh_state))
   
@@ -662,7 +665,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
            Unprocessed_kwh_Batts = Cathode_kwh_state * Unprocessed_Batts_percent,
            Exported_BM_kwh_Batts = Cathode_kwh_state * Exported_BM_Batts_percent) %>% 
     left_join(batt_cap_state_scrap, by = c("Year", "Cathode Mix", "State_Province")) %>% 
-    mutate(
+    mutate( ## this is a proxy variable bc have to apply scrap percentages to full production to get scrap minerals later
       Recycled_Gwh_Prod = Prod_Gwh_state * Scrap_full_recycle_percent,
       Unprocessed_Gwh_Prod = Prod_Gwh_state * Unprocessed_Scrap_percent,
       Exported_BM_Gwh_Prod = Prod_Gwh_state * Exported_BM_Scrap_percent) %>%
@@ -686,7 +689,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
            Cathode_kwh_state, Prod_Gwh_state) %>%
     mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
   
-  
+
   Nat_chem <- future_recycle_chem %>% group_by(Year) %>% 
     summarise(Recycled_kwh_Batts = sum(Recycled_kwh_Batts, na.rm = TRUE),
               Recycled_Gwh_Prod = sum(Recycled_Gwh_Prod, na.rm = TRUE),
@@ -772,7 +775,7 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
         Mineral %in% Not_recovered ~ 0,
         TRUE ~ 1
       )
-    ) %>% mutate(
+    ) %>% mutate( ## if were recycling everything
       Multiplier_no_limit = case_when(
         Mineral %in% everbatt_both ~ EU_recovery,
         Mineral %in% Copper       ~ EU_recovery,
@@ -825,7 +828,8 @@ capacity_chem_scenarios <- function(batt_cap_df, chem_df, mineral_intensity, fut
   return(
     list(
       future_final    = future_final,
-      capacity_needs  = capacity_needs
+      capacity_needs  = capacity_needs,
+      state_mass_recycle_batt = state_mass_recycle_batt
     )
   )
 }
@@ -864,6 +868,12 @@ safe_capacity_chem_scenarios <- function(batt_name, chem_name) {
         mutate(
           Battery_Scenario = batt_name,
           Chemistry_Scenario = chem_name
+        ),
+      
+      state_mass_recycle_batt = res$state_mass_recycle_batt %>%
+        mutate(
+          Battery_Scenario = batt_name,
+          Chemistry_Scenario = chem_name
         )
     )
     
@@ -874,7 +884,6 @@ safe_capacity_chem_scenarios <- function(batt_name, chem_name) {
   })
 }
 
-### LOST 2025 scrap?
 # Run all scenarios using pmap safely
 all_scenarios <- scenario_combos %>%
   mutate(
@@ -896,10 +905,20 @@ capacity_needs_all <- all_scenarios %>%
   map("capacity_needs") %>%
   bind_rows()
 
+state_mass_recycle_batt <- all_scenarios %>%
+  pull(result) %>%
+  compact() %>%
+  map("state_mass_recycle_batt") %>%
+  bind_rows()
+
 # Combine all results
 
 cap_chem_results <- cap_chem_results %>%
   mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - "))
+
+state_mass_recycle_batt <- state_mass_recycle_batt %>%
+  mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - ")) %>%
+  select(-c(Battery_Scenario, Chemistry_Scenario)) 
 
 needed_cap_results <- capacity_needs_all %>%
   mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - "))  %>% 
@@ -926,7 +945,7 @@ legend_order <- c(
   "15% Lower Capacity - Original Chemistry", # green
   "15% Lower Capacity - High LFP Chemistry"  # red
 )
-  
+
 nat_cap_chem_rec <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
   summarise(`Current NA Recycling Capacity` =  sum(`Available Recycled Minerals (w Scrap) (Tonne)`, na.rm = TRUE),
             `All Material is Recycled in NA` = sum(`Available Recycled Minerals No R Restraint (Tonne)`, na.rm = TRUE)) %>%
@@ -939,7 +958,7 @@ nat_cap_chem_rec <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
                                                         # "Recoverable Minerals Exported as Scrap/Batts", "Recoverable Minerals Exported as BM",
                                                         # "Minerals Lost in Non-Hydrometallurgical Facilities"),
                         names_to = "Recycling Scenario", values_to = "Tonne") %>%
-  mutate(Year = as.numeric(Year)) %>% filter(Year <= 2035) %>%
+  mutate(Year = as.numeric(Year)) %>% filter(Year <= 2050) %>%
   mutate(Scenario = factor(Scenario, levels = legend_order)) %>%
   mutate(
     `Recycling Scenario` = forcats::fct_recode(
@@ -1007,7 +1026,7 @@ export_lost <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
 ggplot(
   nat_cap_chem_rec,
   aes(
-    x = as.character(Year),
+    x = Year,
     y = Tonne/1000,
     color = Scenario,                
     alpha = `Recycling Scenario`,    
@@ -1019,7 +1038,7 @@ ggplot(
   geom_point(size = 2) +
   facet_wrap(~ Mineral, scales = "free_y") +
   labs(
-    title = "North America Available Recycled Minerals Until 2035 by Mineral",
+    title = "North America Available Recycled Minerals Until 2050 by Mineral",
     x = "Year",
     y = "Recycled Minerals (thousands Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario",
@@ -1032,6 +1051,9 @@ ggplot(
   ),
   drop = FALSE) +
   theme_minimal(base_size = 14) +
+  scale_x_continuous(
+    breaks = seq(2025, 2050, by = 5)   # 👈 choose spacing (every 2 years)
+  ) +
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
     axis.title = element_text(size = 14, face = "bold"),
@@ -1188,7 +1210,7 @@ ggplot(export_lost, aes(
   scale_color_manual(values = scenario_base_colors) +  # now colors will show
   facet_wrap(~ Mineral, scales = "free_y") +
   labs(
-    title = "Exported Mass of Battery Minerals Each Year",
+    title = "Exported Mass of Battery Minerals Each Year Under Current NA Recycling Plans",
     x = "Year",
     y = "Exported Minerals (thousands of Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario") +
@@ -1316,3 +1338,4 @@ ggplot(export_lost, aes(
 Continent_LIB_Recycle <- future_recycle_type %>% group_by(Year) %>% summarise(all_recycle = sum(LIB_recycle_total))
 Continent_Demand <- state_capacity_added %>% group_by(Year) %>% summarise(all_demand = sum(Total_Add_LIB))
 ratio_in_batts <- Continent_LIB_Recycle %>% merge(Continent_Demand, on = "Year") %>% mutate(percent = Continent_LIB_Recycle/Continent_Demand)
+

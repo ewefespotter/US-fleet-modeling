@@ -40,7 +40,7 @@ capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, futu
   # Apply avg battery size per powertrain and type
   future_demand_cap$LIB_demand_kwh <- future_demand_cap$Total_Add_LIB * future_demand_cap$`Projected Avg Batt Cap (kwh/batt)`
 
-  future_demand_cap <- future_demand_cap %>% group_by(Sale_Year, State_Province) %>%
+  future_demand_cap <- future_demand_cap %>% group_by(Sale_Year, State_Province, Segment, Propulsion) %>%
     summarise(LIB_demand_kwh = sum(LIB_demand_kwh, na.rm = TRUE),
               .groups = "drop")
 
@@ -49,7 +49,7 @@ capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, futu
   
   ### APPLY BENCHMARK
   future_demand_chem <- future_demand_cap %>% 
-    left_join(chem_df, by = c("Sale_Year"), relationship = 'many-to-many') %>%
+    left_join(chem_df, by = c("Sale_Year","Segment","Propulsion"), relationship = 'many-to-many') %>%
     mutate(Cathode_kwh_state = LIB_demand_kwh * `Cathode Mix Share`) %>%
     select(-`Cathode Mix Share`)
   
@@ -171,9 +171,9 @@ ggplot(
   geom_point(size = 2) +
   facet_wrap(~ Mineral, scales = "free_y") +
   labs(
-    title = "Maximum Recycled Content in North America",
+    title = "Percent of Battery Mineral Demand met by Recycled Batteries in North America",
     x = "Year",
-    y = "% Recycled Content",
+    y = "Percent of Demand",
     color = "Battery Capacity - Chemistry Scenario",
     alpha = "Recycling Scenario"
   ) +
