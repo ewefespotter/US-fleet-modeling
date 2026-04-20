@@ -52,6 +52,51 @@ ca_codes <- c(
   "AB","BC","MB","NB","NL","NS","ON","PE","QC","SK","NT","NU","YT"
 )
 
+# Create region mapping - COMPLETE with all states and Mexico as separate region
+region_mapping <- c(
+  # WEST
+  "WA" = "West", "OR" = "West", "CA" = "West", "NV" = "West", 
+  "ID" = "West", "HI" = "West", "AK" = "West",
+  "BC" = "West", "YT" = "West",
+  
+  # MOUNTAIN
+  "MT" = "Mountain", "WY" = "Mountain", "UT" = "Mountain", 
+  "CO" = "Mountain", "AZ" = "Mountain", "NM" = "Mountain",
+  "AB" = "Mountain",
+  
+  # MIDWEST
+  "OH" = "Midwest", "IN" = "Midwest", "IL" = "Midwest", "MI" = "Midwest", 
+  "WI" = "Midwest", "MN" = "Midwest", "IA" = "Midwest", "MO" = "Midwest", 
+  "ND" = "Midwest", "SD" = "Midwest", "NE" = "Midwest", "KS" = "Midwest",
+  "MB" = "Midwest", "SK" = "Midwest",
+  
+  # SOUTH
+  "TX" = "South", "OK" = "South", "AR" = "South", "LA" = "South",
+  "KY" = "South", "TN" = "South", "MS" = "South", "AL" = "South",
+  
+  # EAST (Northeast + Southeast combined)
+  "ME" = "East", "NH" = "East", "VT" = "East", "MA" = "East", 
+  "RI" = "East", "CT" = "East", "NY" = "East", "NJ" = "East", 
+  "PA" = "East", "DE" = "East", "MD" = "East", "DC" = "East", 
+  "VA" = "East", "WV" = "East", "NC" = "East", "SC" = "East", 
+  "GA" = "East", "FL" = "East",
+  "ON" = "East", "QC" = "East", "NB" = "East", "NS" = "East", 
+  "PE" = "East", "NL" = "East", "NT" = "East", "NU" = "East",
+  
+  # MEXICO
+  "MX" = "Mexico"
+)
+
+# Verify all states are included
+all_states <- c(us_codes, ca_codes, "MX")
+missing_states <- setdiff(all_states, names(region_mapping))
+if(length(missing_states) > 0) {
+  print(paste("Missing:", paste(missing_states, collapse = ", ")))
+} else {
+  print("All states, provinces, and Mexico mapped!")
+}
+
+
 state_map_rev <- setNames(names(state_map), state_map)
 
 ##Manufacturing
@@ -425,6 +470,8 @@ recycling_tonnes_total <- recycling_tonnes_by_state %>% group_by(Year) %>%
 NA_recycling_tonnes <- recycling_tonnes_total %>%
   select(-Delay_Cumulative_black_mass_cap, -Delay_Cumulative_refining_cap, -Full_Recycle, -Delay_Full_Recycle) 
 
+NA_recycling_tonnes_delayed <- recycling_tonnes_total %>%
+  select(Year, Delay_Cumulative_black_mass_cap, Delay_Cumulative_refining_cap, -Full_Recycle, -Delay_Full_Recycle) 
 ##MANUFACTURING
 ###LCO https://www.fluxpower.com/blog/what-is-the-energy-density-of-a-lithium-ion-battery?utm_source=chatgpt.com
 specific_energy <- read_csv(file.path(data_folder, "Specific_Energy (-Energy BatPac).csv")) %>% rename (`Cathode Mix` = `Battery Chem`) 
@@ -553,13 +600,13 @@ delayed_manufacturing_expanded <- calendar_delayed %>%
     Production_Adjusted_Down = ifelse(Year < Year_Online, 0, Downstream),
     Production_Adjusted_Mid = ifelse(Year < Year_Online, 0, Midstream),
     Scrap_Years = ifelse(Year >= Year_Online, Year - Year_Online + 1, NA),
-    # Scrap_Rate_Mid = if_else(
-    #   !is.na(Scrap_Years),
-    #   seq(0.0767, 0.0434, length.out = decline_years)[
-    #     pmin(Scrap_Years, decline_years)
-    #   ],
-    #   0
-    # ),
+    Scrap_Rate_Mid = if_else(
+      !is.na(Scrap_Years),
+      seq(0.1105567, 0.0772, length.out = decline_years)[
+        pmin(Scrap_Years, decline_years)
+      ],
+      0
+    ),
     # 
     # Scrap_Rate_Down = if_else(
     #   !is.na(Scrap_Years),
@@ -568,7 +615,6 @@ delayed_manufacturing_expanded <- calendar_delayed %>%
     #   ],
     #   0
     # ),
-    Scrap_Rate_Mid = 0.0767,
     Scrap_Rate_Down = 0.05,
     Gwh_Scrap_Down = Production_Adjusted_Down * Scrap_Rate_Down,
     Production_After_Scrap_Down = Production_Adjusted_Down * (1 - Scrap_Rate_Down),
@@ -647,8 +693,10 @@ caps_15_projected <- batt_cap_15 %>%
   summarise(Avg_Cap_15 = first(Avg_Cap_15))
 
 chem_proj <- future_match_HDV %>% rename (Year = Sale_Year) %>% rename(Mix_proj = `Cathode Mix Share`)
-chem_15 <- final_adjusted_mix_extended %>% rename(Year = Sale_Year) %>% rename(Mix_15 = `Cathode Mix Share`)
-chems_proj_15 <- chem_proj %>% left_join(chem_15, by=c("Year", "Cathode Mix", "Segment","Propulsion"), relationship = "many-to-many")
+chem_LFP <- final_adjusted_mix_extended %>% rename(Year = Sale_Year) %>% rename(Mix_LFP = `Cathode Mix Share`)
+chems_proj_LFP <- chem_proj %>% left_join(chem_LFP, by=c("Year", "Cathode Mix", "Segment","Propulsion"), relationship = "many-to-many")
+
+
 
 ##DEMAND IN TONNES - cap proj by state (add into state libs to get gwh)
 state_cap_add <- state_capacity_added %>%
@@ -668,14 +716,15 @@ state_cap_add <- state_capacity_added %>%
     TRUE ~ State_Province   # leave unchanged if no match
   )) 
 
+
 ### DEMAND IN TONNES with projections of cap and chem
 state_cap_chem_tonne <- state_cap_add %>% 
-  left_join(chems_proj_15, by= c("Year", "Propulsion", "Segment"), relationship = "many-to-many") %>%
+  left_join(chems_proj_LFP, by= c("Year", "Propulsion", "Segment"), relationship = "many-to-many") %>%
   mutate(
     Add_LIB_Gwh_proj_chem = Add_LIB_Gwh_proj * Mix_proj,
     Add_LIB_Gwh_15_chem   = Add_LIB_Gwh_15 * Mix_proj,
-    Add_LIB_Gwh_proj_LFP = Add_LIB_Gwh_proj *Mix_15,
-    Add_LIB_Gwh_15_LFP = Add_LIB_Gwh_15*Mix_15
+    Add_LIB_Gwh_proj_LFP = Add_LIB_Gwh_proj * Mix_LFP,
+    Add_LIB_Gwh_15_LFP = Add_LIB_Gwh_15* Mix_LFP
   ) %>% 
   left_join(specific_energy, by = "Cathode Mix") %>%
   mutate(Pack_kg_Gwh = Pack_kg_kwh*1000000) %>%
@@ -689,10 +738,17 @@ state_cap_chem_tonne <- state_cap_add %>%
             Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE),
             Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
             Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE)) %>% 
-  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, Add_LIB_proj_LFP_tonnes, Add_LIB_15_LFP_tonnes) 
+  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, Add_LIB_proj_LFP_tonnes, Add_LIB_15_LFP_tonnes)  %>%
+  mutate(
+    Country = case_when(
+      State_Province %in% us_codes ~ "US",
+      State_Province %in% ca_codes ~ "CA",
+      State_Province == "MX" ~ "MX",
+      TRUE ~ NA_character_
+    )
+  )
 
 state_demand_tonnes_2050 <- state_cap_chem_tonne %>% filter(Year == 2050) 
-
 
 nat_cap_add <- state_cap_add %>%group_by(Year) %>% 
   summarise(Add_LIB_Gwh_proj = sum(Add_LIB_Gwh_proj, na.rm = TRUE), 
@@ -700,7 +756,12 @@ nat_cap_add <- state_cap_add %>%group_by(Year) %>%
 
 NA_demand_tonnes <- state_cap_chem_tonne %>% group_by(Year) %>%
   summarise(Add_LIB_proj_tonnes = sum(Add_LIB_proj_tonnes, na.rm = TRUE),
-            Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE))
+            Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE),
+            Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
+            Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE)) %>%
+  
+            
+
 
 ###USE National in Gwh to get manufacturing projection
 nat_manu <- all_manufacturing_expanded %>% group_by(Year) %>%
@@ -922,8 +983,7 @@ delayed_all_manufacturing_expanded_complete_yrs <- delayed_manufacturing_expande
   fill(Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid,Share_of_Year_Scrap_Down, Share_of_Year_Scrap_Mid, .direction = "down") %>%
   ungroup() %>% select(Year, State_Province, Share_of_Year_Prod_Down, Share_of_Year_Prod_Mid, Share_of_Year_Scrap_Down, Share_of_Year_Scrap_Mid)
 
-## Limits to 2035 bc state ratios --> only applicable to 2030 bc of shares
-manufacturing_by_state_projected <- all_manufacturing_expanded_complete_yrs  %>%                # only years <= 2035
+manufacturing_by_state_projected <- all_manufacturing_expanded_complete_yrs  %>%               
   mutate(State_Province = if_else(State_Province == "SLP", "MX", State_Province)) %>%
   left_join(tonnes_manufac_projected, by = "Year") %>%  # join totals by year
   mutate(
@@ -944,7 +1004,6 @@ manufacturing_by_state_projected <- all_manufacturing_expanded_complete_yrs  %>%
     Tonnes_Prod_proj_mid, Tonnes_Prod_15_mid
   ) %>%
   ungroup() 
-
 
 manufacturing_by_state_delayed <- delayed_all_manufacturing_expanded_complete_yrs  %>%                # only years <= 2035
   mutate(State_Province = if_else(State_Province == "SLP", "MX", State_Province)) %>%
@@ -978,6 +1037,17 @@ NA_manu <- manufacturing_by_state_projected %>%
             Tonnes_Scrap_15_mid = sum(Tonnes_Scrap_15_mid),
             Tonnes_Prod_proj_mid = sum(Tonnes_Prod_proj_mid),
             Tonnes_Prod_15_mid = sum(Tonnes_Prod_15_mid))
+
+NA_manu_delayed <- manufacturing_by_state_delayed %>% 
+  group_by(Year) %>%
+  summarise(Tonnes_Scrap_proj_down = sum(Tonnes_Scrap_proj_down), 
+            Tonnes_Scrap_15_down = sum(Tonnes_Scrap_15_down),
+            Tonnes_Prod_proj_down = sum(Tonnes_Prod_proj_down), 
+            Tonnes_Prod_15_down = sum(Tonnes_Prod_15_down),
+            Tonnes_Scrap_proj_mid = sum(Tonnes_Scrap_proj_mid),
+            Tonnes_Scrap_15_mid = sum(Tonnes_Scrap_15_mid),
+            Tonnes_Prod_proj_mid = sum(Tonnes_Prod_proj_mid),
+            Tonnes_Prod_15_mid = sum(Tonnes_Prod_15_mid))
   
 ## all in projected scenario rn
 manufacturing_tonnes_2050_projected = manufacturing_by_state_projected %>% filter(Year == 2050) 
@@ -991,211 +1061,4 @@ Mass_all_years <- full_join(state_cap_chem_tonne,
   full_join(recycling_tonnes_by_state,
             by = c("Year","State_Province")) %>%
   mutate(across(where(is.numeric), ~replace_na(.x, 0)))
-
-# from future_minerals_recycle script                
-recycle_batts_by_state_2050 <- state_mass_recycle_batt %>%
-  filter(Year == 2050) %>%
-  pivot_wider(
-    names_from = Scenario,
-    values_from = Batt_Mass_MT
-  ) %>%
-  rename(
-    Recycle_Batt_Proj           = `Baseline Capacity - Original Chemistry`,
-    Recycle_Batt_15             = `15% Lower Capacity - Original Chemistry`,
-    Recycle_Batt_Proj_LFP       = `Baseline Capacity - High LFP Chemistry`,
-    Recycle_Batt_15_LFP         = `15% Lower Capacity - High LFP Chemistry`
-  )
-
-NA_batts <- state_mass_recycle_batt %>% 
-  pivot_wider(
-    names_from = Scenario,
-    values_from = Batt_Mass_MT
-  ) %>%
-  rename(
-    Recycle_Batt_Proj           = `Baseline Capacity - Original Chemistry`,
-    Recycle_Batt_15             = `15% Lower Capacity - Original Chemistry`,
-    Recycle_Batt_Proj_LFP       = `Baseline Capacity - High LFP Chemistry`,
-    Recycle_Batt_15_LFP         = `15% Lower Capacity - High LFP Chemistry`
-  ) %>%
-  group_by(Year) %>%
-  summarise(Recycle_Batt_Proj = sum(Recycle_Batt_Proj),
-            Recycle_Batt_15 = sum(Recycle_Batt_15),
-            Recycle_Batt_Proj_LFP = sum(Recycle_Batt_Proj_LFP),
-            Recycle_Batt_15_LFP = sum(Recycle_Batt_15_LFP))
-
-### ALL REGULAR MANUFACTURING 
-Mass_2050_projected <- full_join(state_demand_tonnes_2050,
-                       manufacturing_tonnes_2050_projected,
-                       by = c("Year", "State_Province")) %>%
-  full_join(recycling_tonnes_2050_projected,
-            by = c("Year", "State_Province")) %>%
-  mutate(across(where(is.numeric), ~replace_na(.x, 0))) %>%
-  full_join(recycle_batts_by_state_2050,
-            by = c("Year","State_Province")) %>%
-  mutate(
-    Country = case_when(
-      State_Province %in% us_codes ~ "US",
-      State_Province %in% ca_codes ~ "CA",
-      State_Province == "MX" ~ "MX",
-      TRUE ~ NA_character_
-    )
-  )
-
-
-## State level one
-Mass_2050_projected_ref <- Mass_2050_projected %>% 
-  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, 
-         Tonnes_Prod_proj_down, Tonnes_Prod_15_down, Tonnes_Prod_proj_mid, Tonnes_Prod_15_mid, 
-         Recycle_Batt_Proj, Recycle_Batt_15,
-         Cumulative_black_mass_cap, Cumulative_refining_cap) 
-
-
-### CHANGED TO 2030--include delay and 15% in one plot for national compare
-Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
-  #mutate(State_Province = factor(State_Province, levels = west_to_east[west_to_east %in% State_Province])) %>%
-  mutate(
-    across(
-      c(
-        Add_LIB_proj_tonnes,
-        Add_LIB_15_tonnes,
-        Tonnes_Prod_proj_down,
-        Tonnes_Prod_15_down,
-        Tonnes_Prod_proj_mid,
-        Tonnes_Prod_15_mid,
-        Recycle_Batt_Proj, 
-        Recycle_Batt_15,
-        Cumulative_black_mass_cap,
-        Cumulative_refining_cap
-      ),
-      ~ .x / 1e6
-    )
-  ) %>%
-  rename(`Demand` = Add_LIB_proj_tonnes, 
-         `15% Reduced Batt Cap Demand` = Add_LIB_15_tonnes,
-         `Pack Manufacturing` = Tonnes_Prod_proj_down, 
-         `15% Reduced Batt Cap Pack Manufacturing` = Tonnes_Prod_15_down,
-         `Cell Manufacturing` = Tonnes_Prod_proj_mid, 
-         `15% Reduced Batt Cap Cell Manufacturing` = Tonnes_Prod_15_mid,
-         `End of Life Batteries` = Recycle_Batt_Proj,
-         `15% Reduced Batt Cap End of Life Batteries` = Recycle_Batt_15,
-         `Black Mass` = Cumulative_black_mass_cap, 
-         `Refining` = Cumulative_refining_cap) %>%
-  select(-c(`15% Reduced Batt Cap Demand`,`15% Reduced Batt Cap Pack Manufacturing`,`15% Reduced Batt Cap Cell Manufacturing`, `15% Reduced Batt Cap End of Life Batteries`)) %>%
-  pivot_longer(cols = c(`Demand`,
-                        `Pack Manufacturing`,
-                        `Cell Manufacturing`,
-                        `End of Life Batteries`,
-                        `Black Mass`, `Refining`),
-               names_to = "Origin",
-               values_to = "Metric Tonnes (millions)") 
-
-Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
-  mutate(
-    Origin = as.character(Origin),  # ensures no leftover factor levels
-    Origin = factor(
-      Origin,
-      levels = c(
-        "Demand",
-        #        "15% Reduced Batt Cap Demand",
-        "Pack Manufacturing",
-        #        "15% Reduced Batt Cap Pack Manufacturing",
-        "Cell Manufacturing",
-        #        "15% Reduced Batt Cap Cell Manufacturing",
-        "End of Life Batteries",
-        #      "15% Reduced Batt Cap End of Life Batteries",
-        "Black Mass",
-        "Refining"
-      )
-    )
-  )
-
-
-
-## DELAYED DFs
-Mass_2050_delayed <- full_join(state_demand_tonnes_2050,
-                                 manufacturing_tonnes_2050_delayed,
-                                 by = c("Year", "State_Province")) %>%
-  full_join(recycling_tonnes_2050_delayed,
-            by = c("Year", "State_Province")) %>%
-  full_join(recycle_batts_by_state_2050,
-            by = c("Year","State_Province")) %>%
-  mutate(across(where(is.numeric), ~replace_na(.x, 0))) %>%
-  rename(Cumulative_black_mass_cap = Delay_Cumulative_black_mass_cap, Cumulative_refining_cap = Delay_Cumulative_refining_cap) %>%
-  mutate(
-    Country = case_when(
-      State_Province %in% us_codes ~ "US",
-      State_Province %in% ca_codes ~ "CA",
-      State_Province == "MX" ~ "MX",
-      TRUE ~ NA_character_
-    )
-  )
-  
-
-
-## State level one
-Mass_2050_delayed_ref <- Mass_2050_delayed %>% 
-  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, 
-         Tonnes_Prod_proj_down, Tonnes_Prod_15_down, Tonnes_Prod_proj_mid, Tonnes_Prod_15_mid, 
-         Recycle_Batt_Proj, Recycle_Batt_15,
-         Cumulative_black_mass_cap, Cumulative_refining_cap) 
-
-### CHANGED TO 2030--include delay and 15% in one plot for national compare
-Mass_2050_delayed_ref <- Mass_2050_delayed_ref %>%
-  #mutate(State_Province = factor(State_Province, levels = west_to_east[west_to_east %in% State_Province])) %>%
-  mutate(
-    across(
-      c(
-        Add_LIB_proj_tonnes,
-        Add_LIB_15_tonnes,
-        Tonnes_Prod_proj_down,
-        Tonnes_Prod_15_down,
-        Tonnes_Prod_proj_mid,
-        Tonnes_Prod_15_mid,
-        Recycle_Batt_Proj, 
-        Recycle_Batt_15,
-        Cumulative_black_mass_cap,
-        Cumulative_refining_cap
-      ),
-      ~ .x / 1e6
-    )
-  ) %>%
-  rename(`Demand` = Add_LIB_proj_tonnes, 
-         `15% Reduced Batt Cap Demand` = Add_LIB_15_tonnes,
-         `Pack Manufacturing` = Tonnes_Prod_proj_down, 
-         `15% Reduced Batt Cap Pack Manufacturing` = Tonnes_Prod_15_down,
-         `Cell Manufacturing` = Tonnes_Prod_proj_mid, 
-         `15% Reduced Batt Cap Cell Manufacturing` = Tonnes_Prod_15_mid,
-         `End of Life Batteries` = Recycle_Batt_Proj,
-         `15% Reduced Batt Cap End of Life Batteries` = Recycle_Batt_15,
-         `Black Mass` = Cumulative_black_mass_cap, 
-         `Refining` = Cumulative_refining_cap) %>%
-  select(-c(`15% Reduced Batt Cap Demand`,`15% Reduced Batt Cap Pack Manufacturing`,`15% Reduced Batt Cap Cell Manufacturing`, `15% Reduced Batt Cap End of Life Batteries`)) %>%
-  pivot_longer(cols = c(`Demand`,
-                        `Pack Manufacturing`,
-                        `Cell Manufacturing`,
-                        `End of Life Batteries`,
-                        `Black Mass`, `Refining`),
-               names_to = "Origin",
-               values_to = "Metric Tonnes (millions)") 
-
-
-Mass_2050_delayed_ref <- Mass_2050_delayed_ref %>%
-  mutate(
-    Origin = as.character(Origin),  # ensures no leftover factor levels
-    Origin = factor(
-      Origin,
-      levels = c(
-        "Demand",
-#        "15% Reduced Batt Cap Demand",
-        "Pack Manufacturing",
-#        "15% Reduced Batt Cap Pack Manufacturing",
-        "Cell Manufacturing",
-#        "15% Reduced Batt Cap Cell Manufacturing",
-        "End of Life Batteries",
-#      "15% Reduced Batt Cap End of Life Batteries",
-        "Black Mass",
-        "Refining"
-      )
-    )
-  )
 

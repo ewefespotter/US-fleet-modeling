@@ -8,6 +8,9 @@ library(purrr)
 library(writexl)
 library(colorspace)
 
+## HDV to 550 projection
+## EU report for medium duty?
+
 HDV_chem <- read_xlsx("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/HMDV_EV_Volumes.xlsx", sheet = "Batteries - MWh", skip = 10)%>%
   rename(
     `2020` = "MWh 2020",

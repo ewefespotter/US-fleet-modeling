@@ -55,7 +55,9 @@ capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, futu
   
   nat_demand <- future_demand_chem %>% group_by(Sale_Year) %>%
     summarise(Cathode_kwh_state = sum(Cathode_kwh_state, na.rm = TRUE))
-
+  
+  Not_recovered  <- c("Phosphorus", "Stainless steel", "Steel", "Aluminum","Carbon")
+  
   future_demand_minerals <- 
     left_join(future_demand_chem, mineral_intensity, by = c("Cathode Mix"), relationship = 'many-to-many') %>%
     filter(!Mineral %in% Not_recovered) %>% ## don't care if demanded either then
@@ -83,7 +85,7 @@ capacity_chem_scenarios <- function(batt_cap_df,chem_df, mineral_intensity, futu
 
 
 # Set names for scenarios
-names(batt_scen) <- c("Baseline Capacity", "15% Lower Capacity")
+names(batt_scen) <- c("Increasing Batt Cap", "Decreasing Batt Cap")
 names(chem_scens) <- c("Original Chemistry", "High LFP Chemistry")
 
 # Use `crossing()` to create all 4 combinations
@@ -129,16 +131,116 @@ cap_chem_demand_results <- bind_rows(all_demand_scenarios$result)
 
 cap_chem_demand_results <- cap_chem_demand_results %>%
   mutate(Scenario = paste(Battery_Scenario, Chemistry_Scenario, sep = " - ")) %>%
-  select(-Battery_Scenario,-Chemistry_Scenario)
+  select(-Battery_Scenario,-Chemistry_Scenario) %>%
+  mutate(
+    Country = case_when(
+      State_Province %in% us_codes ~ "US",
+      State_Province %in% ca_codes ~ "CA",
+      State_Province == "MX" ~ "MX",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  mutate(
+    Scenario = dplyr::recode(
+      Scenario,
+      "Increasing Batt Cap - Original Chemistry" = "Increasing Batt Cap - Benchmark Chemistry",
+      "Increasing Batt Cap - High LFP Chemistry" = "Increasing Batt Cap - High LFP Chemistry",
+      "Decreasing Batt Cap - Original Chemistry" = "Decreasing Batt Cap - Benchmark Chemistry",
+      "Decreasing Batt Cap - High LFP Chemistry" = "Decreasing Batt Cap - High LFP Chemistry"
+    ))
+
+country_demand_cap_chem <- cap_chem_demand_results %>% group_by(Country, Year, Scenario, Mineral) %>%
+  summarise(`Minerals Demand` = sum(`Demand Minerals (Tonne)`)) %>%
+  pivot_longer(cols = `Minerals Demand`,
+               names_to = "Recycling Scenario", values_to = "Tonne") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  filter(Year == 2050, 
+         Scenario %in% c("Increasing Batt Cap - Benchmark Chemistry"))
+
+country_cap_chem_rec <- cap_chem_results %>% group_by (Country, Year, Scenario, Mineral) %>%
+  summarise(`Current NA Recycling Capacity` =  sum(`Available Recycled Minerals (w Scrap) (Tonne)`, na.rm = TRUE),
+            `All Material is Recycled in NA` = sum(`Available Recycled Minerals No R Restraint (Tonne)`, na.rm = TRUE)) %>%
+  pivot_longer(cols = c("Current NA Recycling Capacity", "All Material is Recycled in NA"),  
+               names_to = "Recycling Scenario", values_to = "Tonne") %>%
+  mutate(Year = as.numeric(Year)) %>% 
+  filter(Year == 2050,
+         Scenario %in% c("Increasing Batt Cap - Benchmark Chemistry"))
+
+
+country_data_plot <- country_demand_cap_chem %>%
+  rename(Demand_Tonne = Tonne) %>%
+  full_join(
+    country_cap_chem_rec %>%
+      rename(Recycling_Tonne = Tonne),
+    by = c("Country", "Year", "Mineral", "Scenario", "Recycling Scenario")
+  ) %>%
+  mutate(
+    Tonne = coalesce(Demand_Tonne, Recycling_Tonne),
+    Type = case_when(
+      !is.na(Demand_Tonne) & is.na(Recycling_Tonne) ~ "Demand",
+      is.na(Demand_Tonne) & !is.na(Recycling_Tonne) ~ "Recycling",
+      TRUE ~ "Both"
+    )
+  ) %>%
+  select(-Demand_Tonne, -Recycling_Tonne) %>%
+  mutate(
+    pattern_type = case_when(
+      Country == "US" ~ "diagonal",
+      Country == "CA" ~ "stripe",
+      Country == "MX" ~ "circle"   # dotted look
+    )
+  ) %>%
+  mutate(
+    Country = factor(Country, levels = c("CA", "US", "MX")),
+    Mineral = factor(Mineral, levels = c("Cobalt","Lithium","Manganese","Nickel","Copper","Graphite")),
+    Tonnes = Tonnes/1e6
+  ) 
 
 
 
-nat_demand_cap_chem<- cap_chem_demand_results %>% group_by(Year, Scenario, Mineral) %>%
+ggplot(country_data_plot, aes(x = `Recycling Scenario`, y = Tonne, 
+                              pattern = Country)) +
+  geom_col_pattern(
+    position = "stack",
+    color = "black",
+    pattern_density = 0.2,
+    pattern_spacing = 0.05,
+    pattern_alpha = 0.3,
+    pattern_size = 0.2,
+    pattern_fill = "black"
+  ) +
+  scale_pattern_manual(
+    values = c(
+      "US" = "circle",
+      "CA" = "stripe",
+      "MX" = "crosshatch"
+    )
+  ) +
+  facet_wrap(~Mineral, scales = "free_y")+
+  theme_minimal() +
+  labs(
+    title = "Mineral Demand and Recycling Capacity",
+    x = "Recycling Scenario",
+    y = "Tonnes (millions)",
+    fill = "Country",
+    pattern = "Country"
+  ) +
+  theme(
+    plot.title = element_text(size = 20, hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    legend.title = element_text(size = 16),
+    legend.text = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) 
+
+
+NA_demand_cap_chem<- cap_chem_demand_results %>% group_by(Year, Scenario, Mineral) %>%
   summarise(`Demand Minerals (Tonne)` = sum(`Demand Minerals (Tonne)`, na.rm = TRUE)) %>%
-  mutate(Year = as.numeric(Year))
+  mutate(Year = as.numeric(Year)) 
 
 
-recycle_shifted <- all_nat_cap_chem_rec %>%
+recycle_shifted <- all_NA_cap_chem_rec %>%
   arrange(Mineral, Scenario, Year) %>%
   group_by(Mineral, Scenario) %>%
   mutate(Year = as.numeric(Year) + 1) %>%  # shift Tonne to the next year
@@ -149,63 +251,87 @@ ratio_results <- recycle_shifted %>%
   inner_join(nat_demand_cap_chem, by = c("Year", "Mineral", "Scenario")) %>%
   mutate(Recycle_v_Demand = Tonne / `Demand Minerals (Tonne)`) %>%
   select(-c(Tonne, `Demand Minerals (Tonne)`)) %>%
-  mutate(Scenario = factor(Scenario, levels = legend_order))
+  mutate(Scenario = factor(Scenario, levels = legend_order)) 
+  
 
 #ratio_scrap <- merge(cap_chem_demand_results, recycle_and_scrap, by = c("Year", "State", "Mineral", "Scenario"))
 #ratio_scrap <- ratio_scrap %>% mutate(Recycle_Demand = `Available Recycled Minerals (kg)`/`Demanded Minerals (kg)`) %>% filter (Mineral != "Aluminum") %>% filter (Mineral != "Steel")
 
+scenario_base_colors <- c(
+  "Increasing Batt Cap - Benchmark Chemistry" = "#d7301f",
+  "Increasing Batt Cap - High LFP Chemistry" = "#fdae85",  # warmer, more orange
+  "Decreasing Batt Cap - Benchmark Chemistry" = "#2171b5",
+  "Decreasing Batt Cap - High LFP Chemistry" = "#1b9e77"
+)
 
 ## Recycling Plots
 ggplot(
   ratio_results,
   aes(
     x = as.numeric(Year),
-    y = Recycle_v_Demand*100,
-    color = Scenario,                
-    alpha = `Recycling Scenario`,    
-    group = interaction(Scenario, `Recycling Scenario`)  
+    y = Recycle_v_Demand * 100,
+    color = Scenario,
+    alpha = `Recycling Scenario`,
+    group = interaction(Scenario, `Recycling Scenario`)
   )
 ) + 
-  scale_y_sqrt() +
   geom_line(linewidth = 1.1) +
   geom_point(size = 2) +
+  
+  scale_color_manual(values = scenario_base_colors) +
+  
+  scale_y_continuous(
+    limits = c(0, NA),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
   facet_wrap(~ Mineral, scales = "free_y") +
+  
   labs(
-    title = "Percent of Battery Mineral Demand met by Recycled Batteries in North America",
+    title = "Percent of Battery Mineral Demand Met by Recycled Batteries in North America",
     x = "Year",
-    y = "Percent of Demand",
-    color = "Battery Capacity - Chemistry Scenario",
+    y = "Percent of Demand (%)",
+    color = "Scenario",
     alpha = "Recycling Scenario"
   ) +
+  
   scale_alpha_manual(values = c(
-    "Recycling Limited to NA 2025 Online or Planned Facilities" = 1,  # darkest
+    "Recycling Limited to NA 2025 Online or Planned Facilities" = 1,
     "All Material is Recycled in NA" = 0.4
-    # add more if you have more recycling scenarios
   )) +
-  scale_x_continuous(breaks = seq(2025, 2050, by = 5)) + 
+  
+  scale_y_continuous(
+    limits = c(0, NA),
+    breaks = scales::pretty_breaks(n = 8),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
   theme_minimal(base_size = 14) +
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
     axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
-    axis.text.x = element_text(angle = 30, hjust = 1),  # tilt x-axis labels
+    axis.text = element_text(size = 14),
+    axis.text.x = element_text(angle = 30, hjust = 1),
     strip.text = element_text(size = 14, face = "bold"),
     legend.position = "bottom",
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 11)
+    legend.box = "horizontal",
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14)
   ) +
+  
   guides(
     color = guide_legend(
       title.position = "top",
       title.hjust = 0.5,
       nrow = 2,
-      byrow = TRUE
+      byrow = TRUE,
+      order = 1  # 👈 color legend displays first
     ),
     alpha = guide_legend(
       title.position = "top",
       title.hjust = 0.5,
       nrow = 2,
-      byrow = TRUE,
+      order = 2,  # 👈 alpha legend displays second
       override.aes = list(
         color = "black",
         linewidth = 1.2

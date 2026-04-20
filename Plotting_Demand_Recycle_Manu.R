@@ -7,25 +7,246 @@ library(tidyverse)
 library(ggplot2)
 library(geofacet)
 
+# from future_minerals_recycle script                
+recycle_batts_by_state_2050 <- state_mass_recycle_batt %>%
+  filter(Year == 2050) %>%
+  pivot_wider(
+    names_from = Scenario,
+    values_from = Batt_Mass_MT
+  ) %>%
+  rename(
+    Recycle_Batt_Proj           = `Increasing Batt Cap - Benchmark Chemistry`,
+    Recycle_Batt_15             = `Decreasing Batt Cap - Benchmark Chemistry`,
+    Recycle_Batt_Proj_LFP       = `Increasing Batt Cap - High LFP Chemistry`,
+    Recycle_Batt_15_LFP         = `Decreasing Batt Cap - High LFP Chemistry`
+  )
+
+
+
+NA_batts <- state_mass_recycle_batt %>% 
+  pivot_wider(
+    names_from = Scenario,
+    values_from = Batt_Mass_MT
+  ) %>%
+  rename(
+    Recycle_Batt_Proj           = `Increasing Batt Cap - Benchmark Chemistry`,
+    Recycle_Batt_15             = `Decreasing Batt Cap - Benchmark Chemistry`,
+    Recycle_Batt_Proj_LFP       = `Increasing Batt Cap - High LFP Chemistry`,
+    Recycle_Batt_15_LFP         = `Decreasing Batt Cap - High LFP Chemistry`
+  )%>%
+  group_by(Year) %>%
+  summarise(Recycle_Batt_Proj = sum(Recycle_Batt_Proj),
+            Recycle_Batt_15 = sum(Recycle_Batt_15),
+            Recycle_Batt_Proj_LFP = sum(Recycle_Batt_Proj_LFP),
+            Recycle_Batt_15_LFP = sum(Recycle_Batt_15_LFP))
+
+### ALL REGULAR MANUFACTURING 
+Mass_2050_projected <- full_join(state_demand_tonnes_2050,
+                                 manufacturing_tonnes_2050_projected,
+                                 by = c("Year", "State_Province")) %>%
+  full_join(recycling_tonnes_2050_projected,
+            by = c("Year", "State_Province")) %>%
+  mutate(across(where(is.numeric), ~replace_na(.x, 0))) %>%
+  full_join(recycle_batts_by_state_2050,
+            by = c("Year","State_Province")) %>%
+  mutate(
+    Country = case_when(
+      State_Province %in% us_codes ~ "US",
+      State_Province %in% ca_codes ~ "CA",
+      State_Province == "MX" ~ "MX",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+## State level one
+Mass_2050_projected_ref <- Mass_2050_projected %>% 
+  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, 
+         Tonnes_Prod_proj_down, Tonnes_Prod_15_down, Tonnes_Prod_proj_mid, Tonnes_Prod_15_mid, 
+         Recycle_Batt_Proj, Recycle_Batt_15,
+         Cumulative_black_mass_cap, Cumulative_refining_cap) 
+
+
+### CHANGED TO 2030--include delay and 15% in one plot for national compare
+Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+  #mutate(State_Province = factor(State_Province, levels = west_to_east[west_to_east %in% State_Province])) %>%
+  mutate(
+    across(
+      c(
+        Add_LIB_proj_tonnes,
+        Add_LIB_15_tonnes,
+        Tonnes_Prod_proj_down,
+        Tonnes_Prod_15_down,
+        Tonnes_Prod_proj_mid,
+        Tonnes_Prod_15_mid,
+        Recycle_Batt_Proj, 
+        Recycle_Batt_15,
+        Cumulative_black_mass_cap,
+        Cumulative_refining_cap
+      ),
+      ~ .x / 1e6
+    )
+  ) %>%
+  rename(`LIB Demand` = Add_LIB_proj_tonnes, 
+         `15% Reduced Batt Cap LIB Demand` = Add_LIB_15_tonnes,
+         `Pack Manufacturing` = Tonnes_Prod_proj_down, 
+         `15% Reduced Batt Cap Pack Manufacturing` = Tonnes_Prod_15_down,
+         `Cell Manufacturing` = Tonnes_Prod_proj_mid, 
+         `15% Reduced Batt Cap Cell Manufacturing` = Tonnes_Prod_15_mid,
+         `End of Life Batteries` = Recycle_Batt_Proj,
+         `15% Reduced Batt Cap End of Life Batteries` = Recycle_Batt_15,
+         `Black Mass` = Cumulative_black_mass_cap, 
+         `Refining` = Cumulative_refining_cap) %>%
+  select(-c(`15% Reduced Batt Cap LIB Demand`,`15% Reduced Batt Cap Pack Manufacturing`,`15% Reduced Batt Cap Cell Manufacturing`, `15% Reduced Batt Cap End of Life Batteries`)) %>%
+  pivot_longer(cols = c(`LIB Demand`,
+                        `Pack Manufacturing`,
+                        `Cell Manufacturing`,
+                        `End of Life Batteries`,
+                        `Black Mass`, `Refining`),
+               names_to = "Origin",
+               values_to = "Metric Tonnes (millions)") 
+
+
+
+
+Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+  mutate(
+    Origin = as.character(Origin),  # ensures no leftover factor levels
+    Origin = factor(
+      Origin,
+      levels = c(
+        "LIB Demand",
+        #        "15% Reduced Batt Cap LIB Demand",
+        "Pack Manufacturing",
+        #        "15% Reduced Batt Cap Pack Manufacturing",
+        "Cell Manufacturing",
+        #        "15% Reduced Batt Cap Cell Manufacturing",
+        "End of Life Batteries",
+        #      "15% Reduced Batt Cap End of Life Batteries",
+        "Black Mass",
+        "Refining"
+      )
+    )
+  ) 
+
+# Add Region column to your data
+Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+  mutate(Region = region_mapping[State_Province]) %>%
+  mutate(Region = factor(Region, levels = c("West", "Mountain", "Midwest", "South", "East", "Mexico")))
+
+## DELAYED DFs
+Mass_2050_delayed <- full_join(state_demand_tonnes_2050,
+                               manufacturing_tonnes_2050_delayed,
+                               by = c("Year", "State_Province")) %>%
+  full_join(recycling_tonnes_2050_delayed,
+            by = c("Year", "State_Province")) %>%
+  full_join(recycle_batts_by_state_2050,
+            by = c("Year","State_Province")) %>%
+  mutate(across(where(is.numeric), ~replace_na(.x, 0))) %>%
+  rename(Cumulative_black_mass_cap = Delay_Cumulative_black_mass_cap, Cumulative_refining_cap = Delay_Cumulative_refining_cap) %>%
+  mutate(
+    Country = case_when(
+      State_Province %in% us_codes ~ "US",
+      State_Province %in% ca_codes ~ "CA",
+      State_Province == "MX" ~ "MX",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+
+## State level one
+Mass_2050_delayed_ref <- Mass_2050_delayed %>% 
+  select(Year, State_Province, Add_LIB_proj_tonnes, Add_LIB_15_tonnes, 
+         Tonnes_Prod_proj_down, Tonnes_Prod_15_down, Tonnes_Prod_proj_mid, Tonnes_Prod_15_mid, 
+         Recycle_Batt_Proj, Recycle_Batt_15,
+         Cumulative_black_mass_cap, Cumulative_refining_cap) 
+
+### CHANGED TO 2030--include delay and 15% in one plot for national compare
+Mass_2050_delayed_ref <- Mass_2050_delayed_ref %>%
+  #mutate(State_Province = factor(State_Province, levels = west_to_east[west_to_east %in% State_Province])) %>%
+  mutate(
+    across(
+      c(
+        Add_LIB_proj_tonnes,
+        Add_LIB_15_tonnes,
+        Tonnes_Prod_proj_down,
+        Tonnes_Prod_15_down,
+        Tonnes_Prod_proj_mid,
+        Tonnes_Prod_15_mid,
+        Recycle_Batt_Proj, 
+        Recycle_Batt_15,
+        Cumulative_black_mass_cap,
+        Cumulative_refining_cap
+      ),
+      ~ .x / 1e6
+    )
+  ) %>%
+  rename(`LIB Demand` = Add_LIB_proj_tonnes, 
+         `15% Reduced Batt Cap LIB Demand` = Add_LIB_15_tonnes,
+         `Pack Manufacturing` = Tonnes_Prod_proj_down, 
+         `15% Reduced Batt Cap Pack Manufacturing` = Tonnes_Prod_15_down,
+         `Cell Manufacturing` = Tonnes_Prod_proj_mid, 
+         `15% Reduced Batt Cap Cell Manufacturing` = Tonnes_Prod_15_mid,
+         `End of Life Batteries` = Recycle_Batt_Proj,
+         `15% Reduced Batt Cap End of Life Batteries` = Recycle_Batt_15,
+         `Black Mass` = Cumulative_black_mass_cap, 
+         `Refining` = Cumulative_refining_cap) %>%
+  select(-c(`15% Reduced Batt Cap LIB Demand`,`15% Reduced Batt Cap Pack Manufacturing`,`15% Reduced Batt Cap Cell Manufacturing`, `15% Reduced Batt Cap End of Life Batteries`)) %>%
+  pivot_longer(cols = c(`LIB Demand`,
+                        `Pack Manufacturing`,
+                        `Cell Manufacturing`,
+                        `End of Life Batteries`,
+                        `Black Mass`, `Refining`),
+               names_to = "Origin",
+               values_to = "Metric Tonnes (millions)") 
+
+
+Mass_2050_delayed_ref <- Mass_2050_delayed_ref %>%
+  mutate(
+    Origin = as.character(Origin),  # ensures no leftover factor levels
+    Origin = factor(
+      Origin,
+      levels = c(
+        "LIB Demand",
+        #        "15% Reduced Batt Cap LIB Demand",
+        "Pack Manufacturing",
+        #        "15% Reduced Batt Cap Pack Manufacturing",
+        "Cell Manufacturing",
+        #        "15% Reduced Batt Cap Cell Manufacturing",
+        "End of Life Batteries",
+        #      "15% Reduced Batt Cap End of Life Batteries",
+        "Black Mass",
+        "Refining"
+      )
+    )
+  )
+
+
 origin_colors <- c(
-  "Demand" = "#1b9e77",
-  "15% Reduced Batt Cap Demand" = "#b2dfdb",
+  "LIB Demand" = "#1b7fb3",
+  "Decreasing Batt Cap LIB Demand" = "#6ba8d4",
   "Pack Manufacturing" = "#D77FBF",
-  "15% Reduced Batt Cap Pack Manufacturing" = "#EEC3DE",
+  "Decreasing Batt Cap Pack Manufacturing" = "#EEC3DE",
   "Cell Manufacturing" = "#FC8D62",
-  "15% Reduced Batt Cap Cell Manufacturing" = "#FDD0B5",
+  "Decreasing Batt Cap Cell Manufacturing" = "#FDD0B5",
+  "End of Life Batteries" = "#66A61E",
+  "Decreasing Batt Cap End of Life Batteries" = "#C7E9A8",
   "Black Mass" = "#000000",
   "Refining" = "#FFD700"
 )
 
-origin_colors <- origin_colors[names(origin_colors) %in% unique(Mass_2030_projected_ref$Origin)]
+origin_colors <- origin_colors[names(origin_colors) %in% unique(Mass_2050_projected_ref$Origin)]
 
+# Set the factor order to match your color vector order
 Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+  mutate(Origin = factor(Origin, levels = names(origin_colors))) %>%
   complete(
     State_Province = ca_us_prov_state_grid1$code,
     Origin,
     fill = list(`Metric Tonnes (millions)` = 0)
-  ) 
+  )
+
 
 ###PLOTTING JUST PLUG IN DELAYED OR NOT
 grid_df <- as_tibble(ca_us_prov_state_grid1)
@@ -61,7 +282,44 @@ ggplot(
   labs(
     title = "North American Battery Demand, Manufacturing and Recycling Tonnage (2050)",
     y = "Metric Tonnes (millions)",
-    x = "Supply Chain Segment (Baseline Battery Capacity and Original Chemistry Projections)"
+    x = "Supply Chain Segment (Increasing Battery Capacity and Benchmark Chemistry Projections)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 11),
+    panel.grid.major = element_line(color = "grey70", linewidth = 0.6),
+    panel.grid.minor = element_line(color = "grey80", linewidth = 0.4)
+  )
+
+region_grid <- data.frame(
+  code = c("West", "Mountain", "Midwest", "Mexico", "East", "South"),
+  name = c("West", "Mountain", "Midwest", "Mexico", "East", "South"),
+  col = c(1, 2, 3, 2, 4, 4),
+  row = c(1, 1, 1, 2, 1, 2)
+)
+
+# Convert Region to a factor
+Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+  mutate(Region = factor(Region, levels = c("West", "Mountain", "Midwest", "Mexico", "East", "South")))
+
+ggplot(
+  Mass_2050_projected_ref,
+  aes(x = Origin, y = `Metric Tonnes (millions)`, fill = Origin)) +
+  geom_col() +
+  facet_geo(~ Region, grid = region_grid) +
+  scale_fill_manual(values = origin_colors) +
+  labs(
+    title = "North American Battery Demand, Manufacturing and Recycling Tonnage by Region (2050)",
+    y = "Metric Tonnes (millions)",
+    x = "Supply Chain Segment (Increasing Battery Capacity and Benchmark Chemistry Projections)"
   ) +
   theme_minimal(base_size = 14) +
   theme(
@@ -100,18 +358,18 @@ Nat_Mass_2050 <- Mass_2050_projected %>%
     Cumulative_refining_cap = sum(Cumulative_refining_cap, na.rm = TRUE),
     .groups = "drop"  # <-- make sure this is after all commas
   ) %>% 
-  rename("Demand (Baseline Capacity - Original Chemistry)" = Add_LIB_proj_tonnes,
-         "Demand (15% Lower Batt Cap - Original Chemistry)" = Add_LIB_15_tonnes, 
-         #"Demand (Baseline Capacity - High LFP)" = Add_LIB_proj_LFP_tonnes,
-         #"Demand (15% Lower Batt Cap  - High LFP)" = Add_LIB_15_LFP_tonnes,
+  rename("LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = Add_LIB_proj_tonnes,
+         "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = Add_LIB_15_tonnes, 
+         #"LIB Demand (Increasing Batt Cap - High LFP)" = Add_LIB_proj_LFP_tonnes,
+         #"LIB Demand (Decreasing Batt Cap  - High LFP)" = Add_LIB_15_LFP_tonnes,
          "Pack Manufacturing" = Tonnes_Prod_proj_down,
-         "15% Lower Batt Cap Pack Manufacturing" = Tonnes_Prod_15_down,
+         "Decreasing Batt Cap Pack Manufacturing" = Tonnes_Prod_15_down,
          "Cell Manufacturing" = Tonnes_Prod_proj_mid,
-         "15% Lower Batt Cap Cell Manufacturing" = Tonnes_Prod_15_mid,
-         "EOL Batteries (Baseline Capacity - Original Chemistry)" = Recycle_Batt_Proj,
-         "EOL Batteries (15% Lower Batt Cap - Original Chemistry)" = Recycle_Batt_15, 
-         #"EOL Batteries (Baseline Capacity - High LFP)" = Recycle_Batt_Proj_LFP,
-         #"EOL Batteries (15% Lower Batt Cap  - High LFP)" = Recycle_Batt_15_LFP,
+         "Decreasing Batt Cap Cell Manufacturing" = Tonnes_Prod_15_mid,
+         "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_Proj,
+         "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_15, 
+         #"EoL Batteries (Increasing Batt Cap - High LFP)" = Recycle_Batt_Proj_LFP,
+         #"EoL Batteries (Decreasing Batt Cap  - High LFP)" = Recycle_Batt_15_LFP,
          "Black Mass" = Cumulative_black_mass_cap,
          "Refining" = Cumulative_refining_cap)
 
@@ -124,18 +382,18 @@ Nat_Mass_2050_long <- Nat_Mass_2050 %>%
   ) %>% select(-Year) %>%
   mutate(Tonnes = Tonnes/1e6,
          Metric = factor(Metric, levels = c(
-           "Demand (Baseline Capacity - Original Chemistry)",
-           "Demand (15% Lower Batt Cap - Original Chemistry)",
-           #"Demand (Baseline Capacity - High LFP)",
-           #"Demand (15% Lower Batt Cap  - High LFP)",
+           "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)",
+           "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)",
+           #"LIB Demand (Increasing Batt Cap - High LFP)",
+           #"LIB Demand (Decreasing Batt Cap  - High LFP)",
            "Pack Manufacturing",
-           "15% Lower Batt Cap Pack Manufacturing",
+           "Decreasing Batt Cap Pack Manufacturing",
            "Cell Manufacturing",
-           "15% Lower Batt Cap Cell Manufacturing",
-           "EOL Batteries (Baseline Capacity - Original Chemistry)",
-           "EOL Batteries (15% Lower Batt Cap - Original Chemistry)", 
-           #"EOL Batteries (Baseline Capacity - High LFP)",
-           #"EOL Batteries (15% Lower Batt Cap  - High LFP)",
+           "Decreasing Batt Cap Cell Manufacturing",
+           "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)",
+           "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)", 
+           #"EoL Batteries (Increasing Batt Cap - High LFP)",
+           #"EoL Batteries (Decreasing Batt Cap  - High LFP)",
            "Black Mass",
            "Refining"
          ))                                      # keep your desired order
@@ -151,122 +409,10 @@ Nat_Mass_2050_long <- Nat_Mass_2050 %>%
     Country = factor(Country, levels = c("CA", "US", "MX"))
   )
 
-
 ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = Country)) +
   geom_col_pattern(
     position = "stack",
     color = "black",
-    pattern_density = 0.1,
-    pattern_spacing = 0.05,
-    pattern_alpha = 0.3,
-    pattern_size = 0.2,
-    pattern_fill = "black"
-  ) +
-  scale_pattern_manual(
-    values = c(
-      "US" = "none",
-      "CA" = "stripe",
-      "MX" = "circle"
-    )
-  ) +
-  scale_y_continuous(labels = comma) +
-  labs(
-    x = "Supply Chain Segment (Battery Capacity - Chemistry Scenario)",
-    y = "Metric Tonnes Batteries (millions)",
-    fill = NULL,
-    title = "North American Demand, Manufacturing and Recycling Tonnage by Country (2050)"
-  ) +
-  scale_fill_manual(
-    values = c(
-      # Demand — Original Chemistry
-      "Demand (Baseline Capacity - Original Chemistry)" = "#1b9e77",   # teal
-      "Demand (15% Lower Batt Cap - Original Chemistry)" = "#b2dfdb", # light teal
-      
-      # EOL — High LFP
-      "EOL Batteries (Baseline Capacity - Original Chemistry)" = "#66A61E",             # olive
-      "EOL Batteries (15% Lower Batt Cap - Original Chemistry)" = "#C7E9A8",           # light olive
-      
-      # Pack Manufacturing — slightly more purple
-      "Pack Manufacturing" = "#D77FBF",                 # purple-pink
-      "15% Lower Batt Cap Pack Manufacturing" = "#EEC3DE",  # light purple-pink
-      
-      # Cell Manufacturing — coral
-      "Cell Manufacturing" = "#FC8D62",                                # coral
-      "15% Lower Batt Cap Cell Manufacturing" = "#FDD0B5",          # light coral
-      
-      # Recycling / Refining
-      "Black Mass" = "#808080",                                        # black
-      "Refining" = "#E6AB02"                                           # golden amber
-    )
-  ) +
-  geom_col_pattern(
-    position = "stack",
-    color = "black",
-    
-    # 🔑 key fixes
-    pattern_density = 0.5,     # ↓ much less dense
-    pattern_spacing = 0.008,    # ↑ more space between stripes
-    pattern_alpha = 0.3,       # ↓ more transparent pattern
-    pattern_size = 0.2,        # ↓ thinner lines
-    
-    pattern_fill = "black"
-  ) +
-  theme_minimal(base_size = 16) +
-  theme(
-    axis.text.x = element_blank(),  # remove all x-axis text
-    axis.ticks.x = element_blank(), # remove x-axis ticks
-    legend.position = "bottom",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"),
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 10)
-    # larger & centered# keep legend at bottom
-  )
-
-
-
-
-library(ggplot2)
-library(ggpattern)
-library(dplyr)
-library(scales)
-
-Nat_Mass_2050_long <- Nat_Mass_2050 %>% 
-  pivot_longer(
-    cols = -c(Year, Country),           
-    names_to = "Metric",    
-    values_to = "Tonnes"
-  ) %>%
-  select(-Year) %>%
-  mutate(
-    Tonnes = Tonnes / 1e6,
-    Metric = factor(Metric, levels = c(
-      "Demand (Baseline Capacity - Original Chemistry)",
-      "Demand (15% Lower Batt Cap - Original Chemistry)",
-      #"Demand (Baseline Capacity - High LFP)",
-      #"Demand (15% Lower Batt Cap  - High LFP)",
-      "Pack Manufacturing",
-      "15% Lower Batt Cap Pack Manufacturing",
-      "Cell Manufacturing",
-      "15% Lower Batt Cap Cell Manufacturing",
-      "EOL Batteries (Baseline Capacity - Original Chemistry)",
-      "EOL Batteries (15% Lower Batt Cap - Original Chemistry)", 
-      #"EOL Batteries (Baseline Capacity - High LFP)",
-      #"EOL Batteries (15% Lower Batt Cap  - High LFP)",
-      "Black Mass",
-      "Refining"
-    )),
-    Country = factor(Country, levels = c("CA", "US", "MX"))  # ensure stacking order
-  )
-
-ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = Country)) +
-  geom_col_pattern(
-    position = "stack",
-    color = "black",
-    
-    # pattern settings
     pattern_density = 0.2,
     pattern_spacing = 0.05,
     pattern_alpha = 0.3,
@@ -275,25 +421,25 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
   ) +
   scale_pattern_manual(
     values = c(
-      "US" = "circle",     # US bars stay solid
-      "CA" = "stripe",   # CA has stripes
-      "MX" = "crosshatch"    # MX has dots
+      "US" = "circle",
+      "CA" = "stripe",
+      "MX" = "crosshatch"
     )
   ) +
   scale_fill_manual(
     values = c(
-      "Demand (Baseline Capacity - Original Chemistry)" = "#1b9e77",
-      "Demand (15% Lower Batt Cap - Original Chemistry)" = "#b2dfdb",
-      "EOL Batteries (Baseline Capacity - Original Chemistry)" = "#66A61E",
-      "EOL Batteries (15% Lower Batt Cap - Original Chemistry)" = "#C7E9A8",
+      "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = "#1b7fb3",
+      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = "#6ba8d4",
+      "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = "#66A61E",
+      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = "#C7E9A8",
       "Pack Manufacturing" = "#D77FBF",
-      "15% Lower Batt Cap Pack Manufacturing" = "#EEC3DE",
+      "Decreasing Batt Cap Pack Manufacturing" = "#EEC3DE",
       "Cell Manufacturing" = "#FC8D62",
-      "15% Lower Batt Cap Cell Manufacturing" = "#FDD0B5",
+      "Decreasing Batt Cap Cell Manufacturing" = "#FDD0B5",
       "Black Mass" = "#808080",
       "Refining" = "#E6AB02"
     ),
-    labels = function(x) stringr::str_wrap(x, width = 30)  # <- key line
+    labels = function(x) stringr::str_wrap(x, width = 30)
   ) +
   guides(
     fill = guide_legend(
@@ -305,13 +451,14 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
     pattern = guide_legend(
       title = "Country",
       nrow = 1,
-      byrow = TRUE
+      byrow = TRUE,
+      override.aes = list(
+        fill = "white",
+        color = "black"
+      )
     )
   ) +
-  theme(
-    legend.box = "vertical"      # stack Metric above Country
-  ) +
-  scale_y_continuous(labels = comma) +
+  scale_y_continuous(labels = scales::comma) +
   labs(
     x = "Supply Chain Segment (Battery Capacity - Chemistry Scenario)",
     y = "Metric Tonnes Batteries (millions)",
@@ -320,36 +467,36 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
   ) +
   theme_minimal(base_size = 16) +
   theme(
-    legend.box = "vertical",   # Metric on top, Country below
+    legend.box = "vertical",
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
     legend.position = "bottom",
     plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
     axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
+    axis.text = element_text(size = 14),
     strip.text = element_text(size = 14, face = "bold"),
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 10)
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14)
   )
 
-
+## all in millions
 
 NA_plot_data <- NA_demand_tonnes %>% 
   full_join(NA_manu, by = "Year") %>%
   full_join(NA_batts, by = "Year") %>%
   full_join(NA_recycling_tonnes, by = "Year") %>%
   select(-Tonnes_Scrap_proj_down, -Tonnes_Scrap_15_down, -Tonnes_Scrap_proj_mid, 
-         -Tonnes_Scrap_15_mid, -Recycle_Batt_15_LFP, -Recycle_Batt_Proj_LFP) %>%
-  rename("Demand (Baseline Capacity - Original Chemistry)" = Add_LIB_proj_tonnes,
-         "Demand (15% Lower Batt Cap - Original Chemistry)" = Add_LIB_15_tonnes,
+         -Tonnes_Scrap_15_mid, -Recycle_Batt_15_LFP, -Recycle_Batt_Proj_LFP, -Add_LIB_proj_LFP_tonnes, -Add_LIB_15_LFP_tonnes) %>%
+  rename("LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = Add_LIB_proj_tonnes,
+         "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = Add_LIB_15_tonnes,
          "Pack Manufacturing" = Tonnes_Prod_proj_down,
-         "15% Lower Batt Cap Pack Manufacturing" = Tonnes_Prod_15_down,
+         "Decreasing Batt Cap Pack Manufacturing" = Tonnes_Prod_15_down,
          "Cell Manufacturing" = Tonnes_Prod_proj_mid,
-         "15% Lower Batt Cap Cell Manufacturing" = Tonnes_Prod_15_mid,
-         "EOL Batteries (Baseline Capacity - Original Chemistry)" = Recycle_Batt_Proj,
-         "EOL Batteries (15% Lower Batt Cap - Original Chemistry)" = Recycle_Batt_15, 
+         "Decreasing Batt Cap Cell Manufacturing" = Tonnes_Prod_15_mid,
+         "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_Proj,
+         "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_15, 
          "Black Mass" = Cumulative_black_mass_cap,
-         "Refining" = Cumulative_refining_cap) %>%
+         "Refining" =Cumulative_refining_cap) %>%
   pivot_longer(
     cols = -c(Year),           
     names_to = "Metric",    
@@ -358,32 +505,35 @@ NA_plot_data <- NA_demand_tonnes %>%
   mutate(
     Tonnes = Tonnes / 1e6,
     Metric = factor(Metric, levels = c(
-      "Demand (Baseline Capacity - Original Chemistry)",
-      "Demand (15% Lower Batt Cap - Original Chemistry)",
+      "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)",
+      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)",
       "Pack Manufacturing",
-      "15% Lower Batt Cap Pack Manufacturing",
+      "Decreasing Batt Cap Pack Manufacturing",
       "Cell Manufacturing",
-      "15% Lower Batt Cap Cell Manufacturing",
-      "EOL Batteries (Baseline Capacity - Original Chemistry)",
-      "EOL Batteries (15% Lower Batt Cap - Original Chemistry)", 
+      "Decreasing Batt Cap Cell Manufacturing",
+      "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)",
+      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)", 
       "Black Mass",
       "Refining"
     ))) 
-  
+
+
+
 NA_plot_data$Year <- as.numeric(NA_plot_data$Year)
+NA_plot_data <- NA_plot_data %>% filter(Year >= 2025)
 
 ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric)) +
   geom_line(linewidth = 2) +
   scale_color_manual(
     values = c(
-      "Demand (Baseline Capacity - Original Chemistry)" = "#1b9e77",
-      "Demand (15% Lower Batt Cap - Original Chemistry)" = "#b2dfdb",
-      "EOL Batteries (Baseline Capacity - Original Chemistry)" = "#66A61E",
-      "EOL Batteries (15% Lower Batt Cap - Original Chemistry)" = "#C7E9A8",
+      "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = "#1b7fb3",
+      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = "#6ba8d4",
+      "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = "#66A61E",
+      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = "#C7E9A8",
       "Pack Manufacturing" = "#D77FBF",
-      "15% Lower Batt Cap Pack Manufacturing" = "#EEC3DE",
+      "Decreasing Batt Cap Pack Manufacturing" = "#EEC3DE",
       "Cell Manufacturing" = "#FC8D62",
-      "15% Lower Batt Cap Cell Manufacturing" = "#FDD0B5",
+      "Decreasing Batt Cap Cell Manufacturing" = "#FDD0B5",
       "Black Mass" = "#808080",
       "Refining" = "#E6AB02"
     ),
@@ -412,9 +562,8 @@ ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric)) +
     legend.title = element_text(size = 14, face = "bold"),
     legend.text = element_text(size = 12)
   )
-       
-       
-       
+
+
 ### JUST NAATBATT Midstream 
 csv_list_manufac<- read.csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/total_manufacturing_edited.csv") %>%
   rename("State/ Province" = State..Province)

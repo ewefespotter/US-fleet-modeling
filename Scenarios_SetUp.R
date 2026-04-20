@@ -78,7 +78,7 @@ batt_cap_15 <- second_trend_results %>%
     ) 
   ) %>%
   filter(Propulsion != "FCEV") %>% 
-  bind_rows(HDV_batt_cap_15) %>%
+  bind_rows(projection_HDV_full) %>%
   select(-c(cap_2024, cap_2040, intercept, slope))
 
 
@@ -207,4 +207,5 @@ final_adjusted_mix_extended <- bind_rows(
     Propulsion = c("BEV", "PHEV"),
     Segment = c("Car", "SUV")
   ) %>% bind_rows(HDV_chem_project)
+
 
