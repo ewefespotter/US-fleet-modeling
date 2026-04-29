@@ -152,7 +152,7 @@ cap_chem_demand_results <- cap_chem_demand_results %>%
 country_demand_cap_chem <- cap_chem_demand_results %>% group_by(Country, Year, Scenario, Mineral) %>%
   summarise(`Minerals Demand` = sum(`Demand Minerals (Tonne)`)) %>%
   pivot_longer(cols = `Minerals Demand`,
-               names_to = "Recycling Scenario", values_to = "Tonne") %>%
+               names_to = "Recycling Scenario", values_to = "Tonnes") %>%
   mutate(Year = as.numeric(Year)) %>%
   filter(Year == 2050, 
          Scenario %in% c("Increasing Batt Cap - Benchmark Chemistry"))
@@ -168,14 +168,14 @@ country_cap_chem_rec <- cap_chem_results %>% group_by (Country, Year, Scenario, 
 
 
 country_data_plot <- country_demand_cap_chem %>%
-  rename(Demand_Tonne = Tonne) %>%
+  rename(Demand_Tonne = Tonnes) %>%
   full_join(
     country_cap_chem_rec %>%
       rename(Recycling_Tonne = Tonne),
     by = c("Country", "Year", "Mineral", "Scenario", "Recycling Scenario")
   ) %>%
   mutate(
-    Tonne = coalesce(Demand_Tonne, Recycling_Tonne),
+    Tonnes = coalesce(Demand_Tonne, Recycling_Tonne),
     Type = case_when(
       !is.na(Demand_Tonne) & is.na(Recycling_Tonne) ~ "Demand",
       is.na(Demand_Tonne) & !is.na(Recycling_Tonne) ~ "Recycling",
@@ -198,7 +198,8 @@ country_data_plot <- country_demand_cap_chem %>%
 
 
 
-ggplot(country_data_plot, aes(x = `Recycling Scenario`, y = Tonne, 
+##overall circularity
+ggplot(country_data_plot, aes(x = `Recycling Scenario`, y = Tonnes, 
                               pattern = Country)) +
   geom_col_pattern(
     position = "stack",
@@ -216,23 +217,42 @@ ggplot(country_data_plot, aes(x = `Recycling Scenario`, y = Tonne,
       "MX" = "crosshatch"
     )
   ) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5)) +
+  scale_x_discrete(
+    labels = function(x) str_wrap(x, width = 12)
+  )+
   facet_wrap(~Mineral, scales = "free_y")+
-  theme_minimal() +
+  theme_minimal(base_size = 20) +
   labs(
-    title = "Mineral Demand and Recycling Capacity",
+    title = "Mineral Demand vs Mineral Availability (2050) ",
     x = "Recycling Scenario",
     y = "Tonnes (millions)",
     fill = "Country",
     pattern = "Country"
   ) +
+  guides(
+    color = guide_legend(
+      nrow = 5,
+      ncol = 2,
+      byrow = TRUE,
+      override.aes = list(
+        fill = "white",
+        color = "black"))
+  ) +   
+  theme_minimal(base_size = 20) +
   theme(
-    plot.title = element_text(size = 20, hjust = 0.5, face = "bold"),
-    axis.title = element_text(size = 16),
+    legend.box = "vertical",
+    legend.position = "bottom",
+    plot.title = element_text(size = 24, hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 20),
     axis.text = element_text(size = 14),
-    legend.title = element_text(size = 16),
-    legend.text = element_text(size = 14),
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  ) 
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    legend.key.width = unit(0.8, "cm")
+  )
+
+
 
 
 NA_demand_cap_chem<- cap_chem_demand_results %>% group_by(Year, Scenario, Mineral) %>%
@@ -248,7 +268,7 @@ recycle_shifted <- all_NA_cap_chem_rec %>%
 
 # Step 2: Merge with demand
 ratio_results <- recycle_shifted %>%
-  inner_join(nat_demand_cap_chem, by = c("Year", "Mineral", "Scenario")) %>%
+  inner_join(NA_demand_cap_chem, by = c("Year", "Mineral", "Scenario")) %>%
   mutate(Recycle_v_Demand = Tonne / `Demand Minerals (Tonne)`) %>%
   select(-c(Tonne, `Demand Minerals (Tonne)`)) %>%
   mutate(Scenario = factor(Scenario, levels = legend_order)) 
@@ -271,34 +291,20 @@ ggplot(
     x = as.numeric(Year),
     y = Recycle_v_Demand * 100,
     color = Scenario,
-    alpha = `Recycling Scenario`,
+    linetype = `Recycling Scenario`,
     group = interaction(Scenario, `Recycling Scenario`)
   )
 ) + 
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2) +
+  geom_line(linewidth = 1.2) +
   
   scale_color_manual(values = scenario_base_colors) +
   
-  scale_y_continuous(
-    limits = c(0, NA),
-    expand = expansion(mult = c(0, 0.05))
+  scale_linetype_manual(
+    values = c(
+      "Recycling Limited to NA 2025 Online or Planned" = "solid",
+      "All Material is Recycled in NA" = "dashed"
+    )
   ) +
-  
-  facet_wrap(~ Mineral, scales = "free_y") +
-  
-  labs(
-    title = "Percent of Battery Mineral Demand Met by Recycled Batteries in North America",
-    x = "Year",
-    y = "Percent of Demand (%)",
-    color = "Scenario",
-    alpha = "Recycling Scenario"
-  ) +
-  
-  scale_alpha_manual(values = c(
-    "Recycling Limited to NA 2025 Online or Planned Facilities" = 1,
-    "All Material is Recycled in NA" = 0.4
-  )) +
   
   scale_y_continuous(
     limits = c(0, NA),
@@ -306,37 +312,48 @@ ggplot(
     expand = expansion(mult = c(0, 0.05))
   ) +
   
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 14),
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    strip.text = element_text(size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.box = "horizontal",
-    legend.title = element_text(size = 16, face = "bold"),
-    legend.text = element_text(size = 14)
+  facet_wrap(~ Mineral, scales = "free_y") +
+  
+  labs(
+    title = "Maximum Recycled Content Standard in North America",
+    x = "Year",
+    y = "% Recycled Content",
+    color = "Scenario",
+    linetype = "Recycling Scenario"
   ) +
   
+  theme_minimal(base_size = 20) +
   guides(
     color = guide_legend(
-      title.position = "top",
-      title.hjust = 0.5,
-      nrow = 2,
-      byrow = TRUE,
-      order = 1  # 👈 color legend displays first
+      nrow = 2, 
+      byrow = TRUE, 
+      order = 1,
+      title = "Scenario"
     ),
-    alpha = guide_legend(
-      title.position = "top",
-      title.hjust = 0.5,
-      nrow = 2,
-      order = 2,  # 👈 alpha legend displays second
+    linetype = guide_legend(
+      nrow = 1, 
+      order = 2,
       override.aes = list(
         color = "black",
-        linewidth = 1.2
-      )
+        linewidth = 2,
+        size = 3
+      ),
+      title = "Recycling Scenario"
     )
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.box.just = "center",
+    legend.key.width = unit(2.5, "cm"),
+    legend.key.height = unit(0.8, "cm")
   )
 
 

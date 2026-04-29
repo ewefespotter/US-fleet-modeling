@@ -199,6 +199,7 @@ combo_cathodes <- batt_cap_project %>%
 expanded_grid <- combo_cathodes %>%
   tidyr::crossing(all_states)
 
+# getting all states in there
 batt_cap_proj_ext <- expanded_grid %>%
   left_join(
     batt_cap_project,
@@ -821,7 +822,7 @@ NA_cap_chem_rec <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
   mutate(
     `Recycling Scenario` = forcats::fct_recode(
       `Recycling Scenario`,
-      "Recycling Limited to NA 2025 Online or Planned Facilities" = "Current NA Recycling Capacity"
+      "Recycling Limited to NA 2025 Online or Planned" = "Current NA Recycling Capacity"
     )
   )
 
@@ -842,7 +843,7 @@ all_NA_cap_chem_rec <-cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
   mutate(
     `Recycling Scenario` = forcats::fct_recode(
       `Recycling Scenario`,
-      "Recycling Limited to NA 2025 Online or Planned Facilities" = "Current NA Recycling Capacity"
+      "Recycling Limited to NA 2025 Online or Planned" = "Current NA Recycling Capacity"
     )
   )
 
@@ -863,7 +864,6 @@ non_recovery_lost <- cap_chem_results %>%
     Scenario = factor(Scenario, levels = legend_order),
     Mineral = factor(Mineral, levels = c("Manganese", "Copper", "Lithium", "Graphite"))  # 👈 add this
   )
-
 
 
 export_lost <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
@@ -896,42 +896,49 @@ ggplot(
     x = Year,
     y = Tonne/1000,
     color = Scenario,                
-    alpha = `Recycling Scenario`,    
+    linetype = `Recycling Scenario`,    
     group = interaction(Scenario, `Recycling Scenario`)  
   )
 ) + 
   scale_y_sqrt(
-    breaks = scales::pretty_breaks(n = 8)
+    breaks = scales::pretty_breaks(n = 6)
   ) +
   geom_line(linewidth = 1.1) +
-  geom_point(size = 2) +
+  #geom_point(aes(shape = `Recycling Scenario`), size = 2) +
   facet_wrap(~ Mineral, scales = "free_y") +
   labs(
     title = "North America Yearly Recoverable Minerals Until 2050",
     x = "Year",
     y = "Recycled Minerals (thousands Metric Tonnes)",
     color = "Battery Capacity - Chemistry Scenario",
-    alpha = "Recycling Scenario"
+    linetype = "Recycling Scenario",
+    shape = "Recycling Scenario"
   ) +
-  scale_alpha_manual(values = c(
-    "Recycling Limited to NA 2025 Online or Planned Facilities" = 1,  # darkest
-    "All Material is Recycled in NA" = 0.4
-    # add more if you have more recycling scenarios
+  scale_linetype_manual(values = c(
+    "Recycling Limited to NA 2025 Online or Planned" = "solid",
+    "All Material is Recycled in NA" = "dashed"
   ),
   drop = FALSE) +
-  theme_minimal(base_size = 14) +
+  scale_shape_manual(values = c(
+    "Recycling Limited to NA 2025 Online or Planned" = 16,
+    "All Material is Recycled in NA" = NA
+  ),
+  drop = FALSE) +
+  theme_minimal(base_size = 20) +
   scale_x_continuous(
-    breaks = seq(2025, 2050, by = 5)   # 👈 choose spacing (every 2 years)
+    breaks = seq(2025, 2050, by = 5)
   ) +
   theme(
-    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.title = element_text(size = 16, face = "bold"),
-    axis.text = element_text(size = 14),
-    axis.text.x = element_text(angle = 30, hjust = 1),  # tilt x-axis labels
-    strip.text = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text.y = element_text(size = 14),  # Change from 20 to smaller size
+    axis.text.x = element_text(angle = 30, hjust = 1, size = 16),
+    strip.text = element_text(size = 20, face = "bold"),
     legend.position = "bottom",
-    legend.title = element_text(size = 16, face = "bold"),
-    legend.text = element_text(size = 14)
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 15),
+    legend.box = "vertical",
+    legend.box.just = "center"
   ) +
   scale_color_manual(values = scenario_base_colors) +
   guides(
@@ -939,26 +946,29 @@ ggplot(
       title.position = "top",
       title.hjust = 0.5,
       nrow = 2,
-      byrow = TRUE
+      byrow = TRUE,
+      order = 1
     ),
-    alpha = guide_legend(
+    linetype = guide_legend(
       title.position = "top",
       title.hjust = 0.5,
       nrow = 2,
       byrow = TRUE,
       override.aes = list(
-        color = "black",
-        linewidth = 1.2
-      )
-    )
+        color = "black"
+      ),
+      order = 2
+    ),
+    shape = "none"
   )
+
 
 
 
 ggplot(
   non_recovery_lost,
   aes(
-    x = factor(Year),
+    x = Mineral,
     y = Cum_Tonne/1000,
     #fill = Scenario,
     pattern = Mineral
@@ -973,47 +983,49 @@ ggplot(
     pattern_spacing = 0.03
   ) +
   labs(
-    title = "Cumulative North America Minerals Lost to Lack of Recovery Standards",
-    x = "Year",
+    title = "Cumulative North America Minerals Lost to Lack of Recovery Standards (2035)",
+    x = "Mineral",
     y = "Lost Minerals (thousands Metric Tonnes)",
     #fill = "Scenario",
-    pattern = "Mineral"
+    #pattern = "Mineral"
   ) +
   #scale_fill_manual(values = scenario_base_colors) +
-  scale_pattern_manual(values = c(
-    "Lithium" = "stripe",
-    "Copper" = "crosshatch",
-    "Manganese" = "circle",
-    "Graphite" = "wave"
-  )) + 
-  guides(
+  #scale_pattern_manual(values = c(
+    #"Lithium" = "stripe",
+   # "Copper" = "crosshatch",
+   # "Manganese" = "circle",
+   # "Graphite" = "wave"
+  #)) + 
+  #guides(
     #fill = guide_legend(
       #override.aes = list(pattern = "none"),
       #nrow = 2,
       #byrow = TRUE
     #),
-    pattern = guide_legend(
-      nrow = 1,
-      byrow = TRUE,
-      override.aes = list(
-        fill = "white",   # 👈 ensures white background
-        color = "black"
-      )
-    )
-  ) +
+    #pattern = guide_legend(
+      #nrow = 1,
+     # byrow = TRUE,
+      #override.aes = list(
+        #fill = "white",   # 👈 ensures white background
+        #color = "black"
+      #)
+    #)
+ # ) +
   scale_y_sqrt()+
   theme_minimal(base_size = 14) +
   theme(
-    legend.key = element_rect(fill = "white", color = NA),
-    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    legend.position = "bottom",
-    legend.box = "horizontal",
-    legend.title = element_text(size = 14, face = "bold"),
-    legend.text = element_text(size = 12)
+    #legend.key = element_rect(fill = "white", color = NA),
+    plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+    #legend.position = "bottom",
+    #legend.box = "horizontal",
+    #legend.title = element_text(size = 20, face = "bold"),
+    #legend.text = element_text(size = 20)
   ) 
+
+
 # Define a base color for each Scenario
 
 legend_order_recycle <- c(
@@ -1048,8 +1060,8 @@ ggplot(needed_cap_long, aes(
   linetype = `Recycling Step`,
   group = interaction(Scenario, `Recycling Step`)
 )) +
-  geom_line(size = 1.2) +
-  geom_point(size = 2) +
+  geom_line(linewidth = 1.2) +
+  #geom_point(size = 2) +
   scale_x_continuous(
     breaks = seq(2025, 2050, by = 5),
     expand = c(0, 0)
@@ -1069,21 +1081,38 @@ ggplot(needed_cap_long, aes(
     color = "Scenario",
     linetype = "Recycling Step"
   ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.title = element_text(size = 16, face = "bold"),
-    axis.text = element_text(size = 16),
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    strip.text = element_text(size = 16, face = "bold"),
-    legend.text = element_text(size = 14),
-    legend.title = element_text(size = 16, face = "bold"),
-    legend.position = "bottom",
-    legend.box = "horizontal",   # 👈 key change
-  ) +
+  theme_minimal(base_size = 20) +
   guides(
-    color = guide_legend(nrow = 2, byrow = TRUE),
-    linetype = guide_legend(nrow = 1)
+    color = guide_legend(
+      nrow = 2, 
+      byrow = TRUE, 
+      order = 1,
+      title = "Scenario"
+    ),
+    linetype = guide_legend(
+      nrow = 1, 
+      order = 2,
+      override.aes = list(
+        color = "black",
+        linewidth = 2,
+        size = 3
+      ),
+      title = "Recycling Step"
+    )
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.box.just = "center",
+    legend.key.width = unit(2.5, "cm"),
+    legend.key.height = unit(0.8, "cm")
   )
 
 

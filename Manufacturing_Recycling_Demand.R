@@ -52,40 +52,46 @@ ca_codes <- c(
   "AB","BC","MB","NB","NL","NS","ON","PE","QC","SK","NT","NU","YT"
 )
 
-# Create region mapping - COMPLETE with all states and Mexico as separate region
 region_mapping <- c(
-  # WEST
-  "WA" = "West", "OR" = "West", "CA" = "West", "NV" = "West", 
-  "ID" = "West", "HI" = "West", "AK" = "West",
-  "BC" = "West", "YT" = "West",
+  # US - WEST
+  "WA" = "US-West", "OR" = "US-West", "CA" = "US-West", "NV" = "US-West", 
+  "ID" = "US-West", "HI" = "US-West", "AK" = "US-West",
   
-  # MOUNTAIN
-  "MT" = "Mountain", "WY" = "Mountain", "UT" = "Mountain", 
-  "CO" = "Mountain", "AZ" = "Mountain", "NM" = "Mountain",
-  "AB" = "Mountain",
+  # US - MOUNTAIN
+  "MT" = "US-Mountain", "WY" = "US-Mountain", "UT" = "US-Mountain", 
+  "CO" = "US-Mountain", "AZ" = "US-Mountain", "NM" = "US-Mountain",
   
-  # MIDWEST
-  "OH" = "Midwest", "IN" = "Midwest", "IL" = "Midwest", "MI" = "Midwest", 
-  "WI" = "Midwest", "MN" = "Midwest", "IA" = "Midwest", "MO" = "Midwest", 
-  "ND" = "Midwest", "SD" = "Midwest", "NE" = "Midwest", "KS" = "Midwest",
-  "MB" = "Midwest", "SK" = "Midwest",
+  # US - MIDWEST
+  "OH" = "US-Midwest", "IN" = "US-Midwest", "IL" = "US-Midwest", "MI" = "US-Midwest", 
+  "WI" = "US-Midwest", "MN" = "US-Midwest", "IA" = "US-Midwest", "MO" = "US-Midwest", 
+  "ND" = "US-Midwest", "SD" = "US-Midwest", "NE" = "US-Midwest", "KS" = "US-Midwest",
   
-  # SOUTH
-  "TX" = "South", "OK" = "South", "AR" = "South", "LA" = "South",
-  "KY" = "South", "TN" = "South", "MS" = "South", "AL" = "South",
+  # US - SOUTH
+  "TX" = "US-South", "OK" = "US-South", "AR" = "US-South", "LA" = "US-South",
+  "KY" = "US-South", "TN" = "US-South", "MS" = "US-South", "AL" = "US-South",
   
-  # EAST (Northeast + Southeast combined)
-  "ME" = "East", "NH" = "East", "VT" = "East", "MA" = "East", 
-  "RI" = "East", "CT" = "East", "NY" = "East", "NJ" = "East", 
-  "PA" = "East", "DE" = "East", "MD" = "East", "DC" = "East", 
-  "VA" = "East", "WV" = "East", "NC" = "East", "SC" = "East", 
-  "GA" = "East", "FL" = "East",
-  "ON" = "East", "QC" = "East", "NB" = "East", "NS" = "East", 
-  "PE" = "East", "NL" = "East", "NT" = "East", "NU" = "East",
+  # US - EAST
+  "ME" = "US-East", "NH" = "US-East", "VT" = "US-East", "MA" = "US-East", 
+  "RI" = "US-East", "CT" = "US-East", "NY" = "US-East", "NJ" = "US-East", 
+  "PA" = "US-East", "DE" = "US-East", "MD" = "US-East", "DC" = "US-East", 
+  "VA" = "US-East", "WV" = "US-East", "NC" = "US-East", "SC" = "US-East", 
+  "GA" = "US-East", "FL" = "US-East",
+  
+  # CANADA - WEST
+  "BC" = "Canada-West", "YT" = "Canada-West",
+  
+  # CANADA - MOUNTAIN
+  "AB" = "Canada-Mountain",
+  
+  # CANADA - MIDWEST
+  "MB" = "Canada-Midwest", "SK" = "Canada-Midwest",
+  
+  # CANADA - EAST
+  "ON" = "Canada-East", "QC" = "Canada-East", "NB" = "Canada-East", "NS" = "Canada-East", 
+  "PE" = "Canada-East", "NL" = "Canada-East", "NT" = "Canada-East", "NU" = "Canada-East",
   
   # MEXICO
-  "MX" = "Mexico"
-)
+  "MX" = "Mexico")
 
 # Verify all states are included
 all_states <- c(us_codes, ca_codes, "MX")
@@ -758,7 +764,7 @@ NA_demand_tonnes <- state_cap_chem_tonne %>% group_by(Year) %>%
   summarise(Add_LIB_proj_tonnes = sum(Add_LIB_proj_tonnes, na.rm = TRUE),
             Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE),
             Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
-            Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE)) %>%
+            Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE)) 
   
             
 

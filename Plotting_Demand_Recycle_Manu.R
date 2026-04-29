@@ -131,8 +131,7 @@ Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
 
 # Add Region column to your data
 Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
-  mutate(Region = region_mapping[State_Province]) %>%
-  mutate(Region = factor(Region, levels = c("West", "Mountain", "Midwest", "South", "East", "Mexico")))
+  mutate(Region = region_mapping[State_Province]) 
 
 ## DELAYED DFs
 Mass_2050_delayed <- full_join(state_demand_tonnes_2050,
@@ -262,8 +261,8 @@ grid_df <- grid_df %>%
   add_row(
     code = "MX",
     name = "Mexico",
-    row = max(grid_df$row, na.rm = TRUE) + 1,  # position it below existing rows
-    col = 4  # adjust column as you like
+    row = 8 ,  # position it below existing rows
+    col = 5  # adjust column as you like
   )
 
 # restore geofacet_grid class
@@ -273,6 +272,7 @@ class(grid_df) <- c("geofacet_grid", "data.frame")
 ca_us_prov_state_grid1 <- grid_df
 library(scales)
 
+##state plot
 ggplot(
   Mass_2050_projected_ref,
   aes(x = Origin, y = `Metric Tonnes (millions)`, fill = Origin)) +
@@ -284,31 +284,32 @@ ggplot(
     y = "Metric Tonnes (millions)",
     x = "Supply Chain Segment (Increasing Battery Capacity and Benchmark Chemistry Projections)"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 16) +
   theme(
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
     legend.position = "bottom",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
-    strip.text = element_text(size = 14),
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 11),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    strip.text = element_text(size = 16),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14),
     panel.grid.major = element_line(color = "grey70", linewidth = 0.6),
     panel.grid.minor = element_line(color = "grey80", linewidth = 0.4)
   )
 
+##regions plot
 region_grid <- data.frame(
-  code = c("West", "Mountain", "Midwest", "Mexico", "East", "South"),
-  name = c("West", "Mountain", "Midwest", "Mexico", "East", "South"),
-  col = c(1, 2, 3, 2, 4, 4),
-  row = c(1, 1, 1, 2, 1, 2)
+  code = c("US-West", "US-Mountain", "US-Midwest", "US-South", "US-East", "Canada-West", "Canada-Mountain", "Canada-Midwest", "Canada-East", "Mexico"),
+  name = c("US West", "US Mountain", "US Midwest", "US South", "US East", "Canada West", "Canada Mountain", "Canada Midwest", "Canada East", "Mexico"),
+  col = c(1, 2, 3, 4, 5, 1, 2, 3, 4, 5),
+  row = c(1, 1, 1, 1, 1, 2, 2, 2, 2, 2)
 )
 
 # Convert Region to a factor
 Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
-  mutate(Region = factor(Region, levels = c("West", "Mountain", "Midwest", "Mexico", "East", "South")))
+  mutate(Region = factor(Region, levels = c("US-West", "US-Mountain", "US-Midwest", "US-South", "US-East", "Canada-West", "Canada-Mountain", "Canada-Midwest", "Canada-East", "Mexico")))
 
 ggplot(
   Mass_2050_projected_ref,
@@ -321,20 +322,24 @@ ggplot(
     y = "Metric Tonnes (millions)",
     x = "Supply Chain Segment (Increasing Battery Capacity and Benchmark Chemistry Projections)"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 20) +
   theme(
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
     legend.position = "bottom",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12),
-    strip.text = element_text(size = 14),
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 11),
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    strip.text = element_text(size = 20),
+    legend.title = element_text(size =20, face = "bold"),
+    legend.text = element_text(size = 20),
     panel.grid.major = element_line(color = "grey70", linewidth = 0.6),
     panel.grid.minor = element_line(color = "grey80", linewidth = 0.4)
   )
+
+
+
+
 
 
 ## JUST PLUG IN DELAYED OR NOT
@@ -409,6 +414,7 @@ Nat_Mass_2050_long <- Nat_Mass_2050 %>%
     Country = factor(Country, levels = c("CA", "US", "MX"))
   )
 
+##country plot
 ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = Country)) +
   geom_col_pattern(
     position = "stack",
@@ -444,7 +450,6 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
   guides(
     fill = guide_legend(
       override.aes = list(pattern = "none"),
-      title = "Metric",
       nrow = 2,
       byrow = FALSE
     ),
@@ -465,22 +470,22 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
     fill = NULL,
     title = "North American Demand, Manufacturing and Recycling Tonnage by Country (2050)"
   ) +
-  theme_minimal(base_size = 16) +
+  theme_minimal(base_size = 20) +
   theme(
     legend.box = "vertical",
+    legend.box.just = "left",
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
     legend.position = "bottom",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 14),
-    strip.text = element_text(size = 14, face = "bold"),
-    legend.title = element_text(size = 16, face = "bold"),
-    legend.text = element_text(size = 14)
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 15)
   )
 
 ## all in millions
-
 NA_plot_data <- NA_demand_tonnes %>% 
   full_join(NA_manu, by = "Year") %>%
   full_join(NA_batts, by = "Year") %>%
@@ -522,46 +527,64 @@ NA_plot_data <- NA_demand_tonnes %>%
 NA_plot_data$Year <- as.numeric(NA_plot_data$Year)
 NA_plot_data <- NA_plot_data %>% filter(Year >= 2025)
 
-ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric)) +
+
+##overtime data
+ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric, linetype = Metric)) +
   geom_line(linewidth = 2) +
   scale_color_manual(
     values = c(
       "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = "#1b7fb3",
-      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = "#6ba8d4",
+      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = "#1b7fb3",
       "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = "#66A61E",
-      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = "#C7E9A8",
+      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = "#66A61E",
       "Pack Manufacturing" = "#D77FBF",
-      "Decreasing Batt Cap Pack Manufacturing" = "#EEC3DE",
+      "Decreasing Batt Cap Pack Manufacturing" = "#D77FBF",
       "Cell Manufacturing" = "#FC8D62",
-      "Decreasing Batt Cap Cell Manufacturing" = "#FDD0B5",
+      "Decreasing Batt Cap Cell Manufacturing" = "#FC8D62",
       "Black Mass" = "#808080",
       "Refining" = "#E6AB02"
     ),
     labels = function(x) stringr::str_wrap(x, width = 30)
   ) +
+  scale_linetype_manual(
+    values = c(
+      "LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = "solid",
+      "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = "dashed",
+      "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = "solid",
+      "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = "dashed",
+      "Pack Manufacturing" = "solid",
+      "Decreasing Batt Cap Pack Manufacturing" = "dashed",
+      "Cell Manufacturing" = "solid",
+      "Decreasing Batt Cap Cell Manufacturing" = "dashed",
+      "Black Mass" = "solid",
+      "Refining" = "solid"
+    ),
+    labels = function(x) stringr::str_wrap(x, width = 30)
+  ) +
   guides(
     color = guide_legend(
-      title = "Metric",
-      nrow = 2,
-      byrow = FALSE
+      nrow = 5,
+      ncol = 2,
+      byrow = TRUE
     )
   ) +
   labs(
     x = "Year",
     y = "Metric Tonnes Batteries (millions)",
-    title = "North American Demand, Manufacturing and Recycling Tonnage Over Time"
+    title = "North American Demand, Manufacturing and Recycling Tonnage Over Time",
   ) +
-  theme_minimal(base_size = 18) +
+  theme_minimal(base_size = 20) +
   theme(
-    legend.box = "vertical",   # Metric on top, Country below
+    legend.box = "vertical",
     legend.position = "bottom",
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 16, face = "bold"),
-    axis.text = element_text(size = 14),
-    strip.text = element_text(size = 16, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold"),
-    legend.text = element_text(size = 12)
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 14),
+    legend.key.width = unit(2.5, "cm")
   )
+
 
 
 ### JUST NAATBATT Midstream 
