@@ -167,7 +167,7 @@ country_cap_chem_rec <- cap_chem_results %>% group_by (Country, Year, Scenario, 
          Scenario %in% c("Increasing Batt Cap - Benchmark Chemistry"))
 
 
-country_data_plot <- country_demand_cap_chem %>%
+overall_circularity <- country_demand_cap_chem %>%
   rename(Demand_Tonne = Tonnes) %>%
   full_join(
     country_cap_chem_rec %>%
@@ -199,8 +199,8 @@ country_data_plot <- country_demand_cap_chem %>%
 
 
 ##overall circularity
-ggplot(country_data_plot, aes(x = `Recycling Scenario`, y = Tonnes, 
-                              pattern = Country)) +
+ggplot(overall_circularity, aes(x = `Recycling Scenario`, y = Tonnes, pattern = Country,
+                              fill = Country)) +
   geom_col_pattern(
     position = "stack",
     color = "black",
@@ -355,7 +355,6 @@ ggplot(
     legend.key.width = unit(2.5, "cm"),
     legend.key.height = unit(0.8, "cm")
   )
-
 
 
 

@@ -964,67 +964,54 @@ ggplot(
 
 
 
-
 ggplot(
   non_recovery_lost,
   aes(
     x = Mineral,
     y = Cum_Tonne/1000,
-    #fill = Scenario,
+    fill = Mineral,
     pattern = Mineral
   )
-) + 
-  geom_col_pattern(
-    position = position_dodge(width = 0.8),
-    width = 0.7,
-    color = "black",                 # outlines help readability
-    pattern_fill = "black",
-    pattern_density = 0.2,
-    pattern_spacing = 0.03
-  ) +
+) +
+  geom_col() +
   labs(
     title = "Cumulative North America Minerals Lost to Lack of Recovery Standards (2035)",
     x = "Mineral",
     y = "Lost Minerals (thousands Metric Tonnes)",
     #fill = "Scenario",
-    #pattern = "Mineral"
+    pattern = "Mineral"
   ) +
-  #scale_fill_manual(values = scenario_base_colors) +
-  #scale_pattern_manual(values = c(
-    #"Lithium" = "stripe",
-   # "Copper" = "crosshatch",
-   # "Manganese" = "circle",
-   # "Graphite" = "wave"
-  #)) + 
-  #guides(
-    #fill = guide_legend(
-      #override.aes = list(pattern = "none"),
-      #nrow = 2,
-      #byrow = TRUE
-    #),
-    #pattern = guide_legend(
-      #nrow = 1,
-     # byrow = TRUE,
-      #override.aes = list(
-        #fill = "white",   # 👈 ensures white background
-        #color = "black"
-      #)
-    #)
- # ) +
-  scale_y_sqrt()+
   theme_minimal(base_size = 14) +
   theme(
-    #legend.key = element_rect(fill = "white", color = NA),
     plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
     axis.title = element_text(size = 20, face = "bold"),
     axis.text = element_text(size = 20),
     axis.text.x = element_text(angle = 30, hjust = 1)
-    #legend.position = "bottom",
-    #legend.box = "horizontal",
-    #legend.title = element_text(size = 20, face = "bold"),
-    #legend.text = element_text(size = 20)
-  ) 
+  )
 
+# Try replacing geom_col_pattern with standard geom_col
+ggplot(
+  non_recovery_lost,
+  aes(
+    x = Mineral,
+    y = Cum_Tonne/1000
+  )
+) + 
+  geom_col(
+    fill = "steelblue"
+  ) +
+  labs(
+    title = "Cumulative North America Minerals Lost to Lack of Recovery Standards (2035)",
+    x = "Mineral",
+    y = "Lost Minerals (thousands Metric Tonnes)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 24, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 20),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
 
 # Define a base color for each Scenario
 
@@ -1281,3 +1268,4 @@ us_codes <- c(
 ca_codes <- c(
   "AB","BC","MB","NB","NL","NS","ON","PE","QC","SK","NT","NU","YT"
 )
+

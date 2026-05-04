@@ -238,7 +238,7 @@ origin_colors <- c(
 origin_colors <- origin_colors[names(origin_colors) %in% unique(Mass_2050_projected_ref$Origin)]
 
 # Set the factor order to match your color vector order
-Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+States_Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
   mutate(Origin = factor(Origin, levels = names(origin_colors))) %>%
   complete(
     State_Province = ca_us_prov_state_grid1$code,
@@ -274,7 +274,7 @@ library(scales)
 
 ##state plot
 ggplot(
-  Mass_2050_projected_ref,
+  States_Mass_2050_projected_ref,
   aes(x = Origin, y = `Metric Tonnes (millions)`, fill = Origin)) +
   geom_col() +
   facet_geo(~ State_Province, grid = ca_us_prov_state_grid1) +
@@ -308,11 +308,11 @@ region_grid <- data.frame(
 )
 
 # Convert Region to a factor
-Mass_2050_projected_ref <- Mass_2050_projected_ref %>%
+Regions_Mass_2050_projected_ref <- States_Mass_2050_projected_ref %>%
   mutate(Region = factor(Region, levels = c("US-West", "US-Mountain", "US-Midwest", "US-South", "US-East", "Canada-West", "Canada-Mountain", "Canada-Midwest", "Canada-East", "Mexico")))
 
 ggplot(
-  Mass_2050_projected_ref,
+  Regions_Mass_2050_projected_ref,
   aes(x = Origin, y = `Metric Tonnes (millions)`, fill = Origin)) +
   geom_col() +
   facet_geo(~ Region, grid = region_grid) +
@@ -343,43 +343,43 @@ ggplot(
 
 
 ## JUST PLUG IN DELAYED OR NOT
-## National compare scenarios 2035
-Nat_Mass_2050 <- Mass_2050_projected %>%
+## continental compare scenarios 2035
+NA_Mass_2050 <- Mass_2050_projected %>%
   group_by(Year, Country) %>%                        
   summarise(
     Add_LIB_proj_tonnes = sum(Add_LIB_proj_tonnes, na.rm = TRUE), 
     Add_LIB_15_tonnes = sum(Add_LIB_15_tonnes, na.rm = TRUE),
-    #Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
-    #Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE),
+    Add_LIB_proj_LFP_tonnes = sum(Add_LIB_proj_LFP_tonnes, na.rm = TRUE),
+    Add_LIB_15_LFP_tonnes = sum(Add_LIB_15_LFP_tonnes, na.rm = TRUE),
     Tonnes_Prod_proj_down = sum(Tonnes_Prod_proj_down, na.rm = TRUE),
     Tonnes_Prod_15_down = sum(Tonnes_Prod_15_down, na.rm = TRUE),
     Tonnes_Prod_proj_mid = sum(Tonnes_Prod_proj_mid, na.rm = TRUE),
     Tonnes_Prod_15_mid = sum(Tonnes_Prod_15_mid, na.rm = TRUE),
     Recycle_Batt_Proj = sum(Recycle_Batt_Proj, na.rm = TRUE),
     Recycle_Batt_15 = sum(Recycle_Batt_15, na.rm = TRUE),
-    #Recycle_Batt_Proj_LFP = sum(Recycle_Batt_Proj_LFP, na.rm = TRUE),
-    #Recycle_Batt_15_LFP = sum(Recycle_Batt_15_LFP, na.rm = TRUE),
+    Recycle_Batt_Proj_LFP = sum(Recycle_Batt_Proj_LFP, na.rm = TRUE),
+    Recycle_Batt_15_LFP = sum(Recycle_Batt_15_LFP, na.rm = TRUE),
     Cumulative_black_mass_cap = sum(Cumulative_black_mass_cap, na.rm = TRUE),
     Cumulative_refining_cap = sum(Cumulative_refining_cap, na.rm = TRUE),
     .groups = "drop"  # <-- make sure this is after all commas
   ) %>% 
   rename("LIB Demand (Increasing Batt Cap - Benchmark Chemistry)" = Add_LIB_proj_tonnes,
          "LIB Demand (Decreasing Batt Cap - Benchmark Chemistry)" = Add_LIB_15_tonnes, 
-         #"LIB Demand (Increasing Batt Cap - High LFP)" = Add_LIB_proj_LFP_tonnes,
-         #"LIB Demand (Decreasing Batt Cap  - High LFP)" = Add_LIB_15_LFP_tonnes,
+         "LIB Demand (Increasing Batt Cap - High LFP)" = Add_LIB_proj_LFP_tonnes,
+         "LIB Demand (Decreasing Batt Cap  - High LFP)" = Add_LIB_15_LFP_tonnes,
          "Pack Manufacturing" = Tonnes_Prod_proj_down,
          "Decreasing Batt Cap Pack Manufacturing" = Tonnes_Prod_15_down,
          "Cell Manufacturing" = Tonnes_Prod_proj_mid,
          "Decreasing Batt Cap Cell Manufacturing" = Tonnes_Prod_15_mid,
          "EoL Batteries (Increasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_Proj,
          "EoL Batteries (Decreasing Batt Cap - Benchmark Chemistry)" = Recycle_Batt_15, 
-         #"EoL Batteries (Increasing Batt Cap - High LFP)" = Recycle_Batt_Proj_LFP,
-         #"EoL Batteries (Decreasing Batt Cap  - High LFP)" = Recycle_Batt_15_LFP,
+         "EoL Batteries (Increasing Batt Cap - High LFP)" = Recycle_Batt_Proj_LFP,
+         "EoL Batteries (Decreasing Batt Cap  - High LFP)" = Recycle_Batt_15_LFP,
          "Black Mass" = Cumulative_black_mass_cap,
          "Refining" = Cumulative_refining_cap)
 
 
-Nat_Mass_2050_long <- Nat_Mass_2050 %>% 
+NA_Mass_2050_long <- NA_Mass_2050 %>% 
   pivot_longer(
     cols = -c(Year, Country),           # keep Year as a separate column
     names_to = "Metric",    # column that stores the original column names
@@ -415,7 +415,7 @@ Nat_Mass_2050_long <- Nat_Mass_2050 %>%
   )
 
 ##country plot
-ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = Country)) +
+ggplot(NA_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = Country)) +
   geom_col_pattern(
     position = "stack",
     color = "black",
@@ -486,7 +486,7 @@ ggplot(Nat_Mass_2050_long, aes(x = Metric, y = Tonnes, fill = Metric, pattern = 
   )
 
 ## all in millions
-NA_plot_data <- NA_demand_tonnes %>% 
+NA_overtime_data <- NA_demand_tonnes %>% 
   full_join(NA_manu, by = "Year") %>%
   full_join(NA_batts, by = "Year") %>%
   full_join(NA_recycling_tonnes, by = "Year") %>%
@@ -522,14 +522,11 @@ NA_plot_data <- NA_demand_tonnes %>%
       "Refining"
     ))) 
 
+## overtime
+NA_overtime_data$Year <- as.numeric(NA_overtime_data$Year)
+NA_overtime_data <- NA_plot_data %>% filter(Year >= 2025)
 
-
-NA_plot_data$Year <- as.numeric(NA_plot_data$Year)
-NA_plot_data <- NA_plot_data %>% filter(Year >= 2025)
-
-
-##overtime data
-ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric, linetype = Metric)) +
+ggplot(NA_overtime_data, aes(x = Year, y = Tonnes, color = Metric, linetype = Metric)) +
   geom_line(linewidth = 2) +
   scale_color_manual(
     values = c(
@@ -563,15 +560,19 @@ ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric, linetype = Metric
   ) +
   guides(
     color = guide_legend(
+      title = NULL,  # Remove "Metric" title
       nrow = 5,
       ncol = 2,
       byrow = TRUE
+    ),
+    linetype = guide_legend(
+      title = NULL   # Remove "Metric" title from linetype legend too
     )
   ) +
   labs(
     x = "Year",
     y = "Metric Tonnes Batteries (millions)",
-    title = "North American Demand, Manufacturing and Recycling Tonnage Over Time",
+    title = "North American Demand, Manufacturing and Recycling Tonnage Over Time"
   ) +
   theme_minimal(base_size = 20) +
   theme(
@@ -584,6 +585,7 @@ ggplot(NA_plot_data, aes(x = Year, y = Tonnes, color = Metric, linetype = Metric
     legend.text = element_text(size = 14),
     legend.key.width = unit(2.5, "cm")
   )
+
 
 
 

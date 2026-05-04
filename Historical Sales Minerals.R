@@ -16,9 +16,9 @@ mineral_intensity <- read_excel(file.path(data_folder, "Mineral_Intensity(2).xls
 
 
 ##Manufacturing
-EVLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_EVLIB_Flows_detail_Repeal.csv") %>%
   rename(State_Province = State)
-EV_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EV_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_ClosedLoop_AddRetire_byStateSegment_Repeal.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -28,9 +28,9 @@ EV_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Mineral
                values_to = "Add_EV")
 
 
-EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_EVLIB_Flows_detail_Repeal.csv") %>%
   rename(State_Province = State)
-EV_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_ClosedLoop_AddRetire_byStateSegment_ACCII.csv") %>%
+EV_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_ClosedLoop_AddRetire_byStateSegment_Repeal.csv") %>%
   select(State, Segment, Year, add_BEV, add_PHEV) %>%
   group_by(State, Segment, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -39,9 +39,9 @@ EV_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Mineral
                names_to = "Propulsion",
                values_to = "Add_EV")
 
-EVLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_EVLIB_Flows_detail_ACCII.csv") %>%
+EVLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_EVLIB_Flows_detail_Repeal.csv") %>%
   rename(State_Province = State)
-EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_ClosedLoop_StateTotals_ACCII.csv") %>%
+EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_ClosedLoop_StateTotals_Repeal.csv") %>%
   select(State, Year, add_BEV, add_PHEV) %>%
   group_by(State, Year) %>% summarise(add_BEV = sum(add_BEV, na.rm = TRUE), add_PHEV = sum(add_PHEV, na.rm = TRUE)) %>%
   rename(BEV = add_BEV, PHEV = add_PHEV,
@@ -52,24 +52,24 @@ EV_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Mineral
 
 
 
-BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_US_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/US_BESS_Retire_Vector_byStateSegProp_Repeal.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
-BESSLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_CA_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Canada_BESS_Retire_Vector_byStateSegProp_Repeal.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
-BESSLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_BESS_Retire_Vector_byStateSegProp_ACCII.csv") %>%
+BESSLIB_Flows_MX_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/Mexico_BESS_Retire_Vector_byStateSegProp_Repeal.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`)
 
 
-HDV_LIBFlows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_EV_Turnover_ACCII.csv") %>%
+HDV_LIBFlows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_EV_Turnover_Repeal.csv") %>%
   rename(`State_Province` = `State`) %>%
   mutate(Segment = Vehicle) 
 
-HDV_BESSLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_BESS_Retire_ACCII.csv") %>%
+HDV_BESSLIB_Flows_hist <- read_csv("/Users/elsawefes-potter/Documents/Critical_Minerals_Pablo/Final_Data/HDV_BESS_Retire_Repeal.csv") %>%
   rename(LIB_recycling_vector = BESS_retire_vector) %>%
   rename(`State_Province` = `State`) %>%
   mutate(Segment = Vehicle)
