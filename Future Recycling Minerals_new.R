@@ -863,7 +863,7 @@ non_recovery_lost <- cap_chem_results %>%
     Year = as.numeric(Year),
     Scenario = factor(Scenario, levels = legend_order),
     Mineral = factor(Mineral, levels = c("Manganese", "Copper", "Lithium", "Graphite"))  # 👈 add this
-  )
+  ) %>% filter(Scenario == "Increasing Batt Cap - Benchmark Chemistry")
 
 
 export_lost <- cap_chem_results %>% group_by(Year, Scenario, Mineral) %>%
@@ -925,6 +925,9 @@ ggplot(
   ),
   drop = FALSE) +
   theme_minimal(base_size = 20) +
+  theme(
+    legend.key.width = unit(2.5, "cm")
+  )+
   scale_x_continuous(
     breaks = seq(2025, 2050, by = 5)
   ) +
@@ -950,18 +953,17 @@ ggplot(
       order = 1
     ),
     linetype = guide_legend(
-      title.position = "top",
-      title.hjust = 0.5,
-      nrow = 2,
-      byrow = TRUE,
-      override.aes = list(
-        color = "black"
-      ),
-      order = 2
-    ),
-    shape = "none"
-  )
-
+  title.position = "top",
+  title.hjust = 0.5,
+  nrow = 2,
+  byrow = TRUE,
+  override.aes = list(
+    colour = "black",
+    linewidth = 1.1,
+    linetype = c("dashed", "solid")
+  ),
+  order = 2
+)) 
 
 
 ggplot(
